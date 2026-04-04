@@ -1,0 +1,20 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #0f0f1a;
+  color: #fff;
+  min-height: 100vh;
+}
+
+input::placeholder {
+  color: #64748b;
+}
+
+input {
+  color-scheme: dark;
+}
