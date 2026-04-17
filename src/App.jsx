@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import UploadWords from './UploadWords'
 
@@ -7,7 +7,25 @@ function App() {
   const [tab, setTab]       = useState('dashboard')
   const [user, setUser]     = useState(null)
 
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setUser(session.user)
+        setScreen('reset-password')
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
   if (screen === 'landing') return <LandingScreen onStart={() => setScreen('auth')} />
+
+  if (screen === 'reset-password') {
+    return (
+      <ResetPasswordScreen
+        onSuccess={() => { setScreen('app') }}
+      />
+    )
+  }
 
   if (screen === 'auth') {
     return (
@@ -103,41 +121,120 @@ function Stat({ number, label }) {
 
 /* ─── Auth ──────────────────────────────────────────────────────── */
 function AuthScreen({ onBack, onSuccess }) {
-  const [isLogin, setIsLogin]   = useState(true)
+  const [view, setView]         = useState('login') // 'login' | 'register' | 'forgot'
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
   const [message, setMessage]   = useState('')
 
+  function reset() { setError(''); setMessage(''); setPassword('') }
+
   async function handleSubmit() {
     setLoading(true); setError(''); setMessage('')
-    if (isLogin) {
+    if (view === 'login') {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError('אימייל או סיסמה שגויים')
       else onSuccess(data.user)
-    } else {
+    } else if (view === 'register') {
       const { error } = await supabase.auth.signUp({ email, password })
       if (error) setError('שגיאה בהרשמה, נסה שוב')
       else setMessage('נשלח אימייל אימות — בדוק את תיבת הדואר שלך')
+    } else if (view === 'forgot') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      })
+      if (error) setError('שגיאה בשליחת המייל: ' + error.message)
+      else setMessage('קישור לאיפוס סיסמה נשלח — בדוק את תיבת הדואר שלך')
     }
     setLoading(false)
+  }
+
+  if (view === 'forgot') {
+    return (
+      <div style={styles.page}>
+        <div style={styles.authCard}>
+          <button onClick={() => { setView('login'); reset() }} style={styles.backBtn}>← חזור להתחברות</button>
+          <h2 style={styles.authTitle}>שכחת סיסמה?</h2>
+          <p style={{ color: '#64748b', fontSize: 14, textAlign: 'center', marginBottom: 4 }}>
+            הכנס את האימייל שלך ונשלח לך קישור לאיפוס
+          </p>
+          <input style={styles.input} type="email" placeholder="אימייל" value={email} onChange={e => setEmail(e.target.value)} dir="ltr" />
+          {error   && <p style={styles.errorMsg}>{error}</p>}
+          {message && <p style={styles.successMsg}>{message}</p>}
+          <button style={{ ...styles.ctaBtn, marginTop: 8 }} onClick={handleSubmit} disabled={loading || !email}>
+            {loading ? 'שולח...' : 'שלח קישור לאיפוס'}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div style={styles.page}>
       <div style={styles.authCard}>
         <button onClick={onBack} style={styles.backBtn}>← חזור</button>
-        <h2 style={styles.authTitle}>{isLogin ? 'ברוך הבא חזרה' : 'צור חשבון חינמי'}</h2>
+        <h2 style={styles.authTitle}>{view === 'login' ? 'ברוך הבא חזרה' : 'צור חשבון חינמי'}</h2>
         <input style={styles.input} type="email"    placeholder="אימייל"  value={email}    onChange={e => setEmail(e.target.value)}    dir="ltr" />
         <input style={styles.input} type="password" placeholder="סיסמה"  value={password} onChange={e => setPassword(e.target.value)} dir="ltr" />
         {error   && <p style={styles.errorMsg}>{error}</p>}
         {message && <p style={styles.successMsg}>{message}</p>}
         <button style={{ ...styles.ctaBtn, marginTop: 8 }} onClick={handleSubmit} disabled={loading}>
-          {loading ? 'רגע...' : isLogin ? 'התחבר' : 'הירשם'}
+          {loading ? 'רגע...' : view === 'login' ? 'התחבר' : 'הירשם'}
         </button>
-        <button style={styles.switchBtn} onClick={() => { setIsLogin(!isLogin); setError(''); setMessage('') }}>
-          {isLogin ? 'אין לך חשבון? הירשם' : 'יש לך חשבון? התחבר'}
+        {view === 'login' && (
+          <button style={styles.forgotBtn} onClick={() => { setView('forgot'); reset() }}>
+            שכחת סיסמה?
+          </button>
+        )}
+        <button style={styles.switchBtn} onClick={() => { setView(view === 'login' ? 'register' : 'login'); reset() }}>
+          {view === 'login' ? 'אין לך חשבון? הירשם' : 'יש לך חשבון? התחבר'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Reset Password ────────────────────────────────────────────── */
+function ResetPasswordScreen({ onSuccess }) {
+  const [password, setPassword]   = useState('')
+  const [confirm, setConfirm]     = useState('')
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState('')
+
+  async function handleReset() {
+    if (password.length < 6)      { setError('סיסמה חייבת להכיל לפחות 6 תווים'); return }
+    if (password !== confirm)     { setError('הסיסמאות אינן תואמות'); return }
+    setLoading(true); setError('')
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) setError('שגיאה בעדכון הסיסמה: ' + error.message)
+    else onSuccess()
+    setLoading(false)
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.authCard}>
+        <h2 style={styles.authTitle}>הגדר סיסמה חדשה</h2>
+        <input
+          style={styles.input}
+          type="password"
+          placeholder="סיסמה חדשה"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          dir="ltr"
+        />
+        <input
+          style={styles.input}
+          type="password"
+          placeholder="אשר סיסמה"
+          value={confirm}
+          onChange={e => setConfirm(e.target.value)}
+          dir="ltr"
+        />
+        {error && <p style={styles.errorMsg}>{error}</p>}
+        <button style={{ ...styles.ctaBtn, marginTop: 8 }} onClick={handleReset} disabled={loading || !password || !confirm}>
+          {loading ? 'שומר...' : 'שמור סיסמה חדשה'}
         </button>
       </div>
     </div>
@@ -329,6 +426,15 @@ const styles = {
     fontSize: 15,
     textAlign: 'right',
     padding: 0,
+  },
+  forgotBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: '#64748b',
+    cursor: 'pointer',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 2,
   },
   switchBtn: {
     background: 'transparent',
