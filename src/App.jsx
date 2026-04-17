@@ -10,81 +10,93 @@ function App() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
-        setUser(session.user)
+        setUser(session?.user ?? null)
         setScreen('reset-password')
       }
     })
     return () => subscription.unsubscribe()
   }, [])
 
-  if (screen === 'landing') return <LandingScreen onStart={() => setScreen('auth')} />
-
-  if (screen === 'reset-password') {
-    return (
-      <ResetPasswordScreen
-        onSuccess={() => { setScreen('app') }}
-      />
-    )
+  function goHome() {
+    if (user) { setTab('dashboard'); setScreen('app') }
+    else setScreen('landing')
   }
 
-  if (screen === 'auth') {
-    return (
-      <AuthScreen
-        onBack={() => setScreen('landing')}
-        onSuccess={u => { setUser(u); setScreen('app') }}
-      />
-    )
-  }
+  const showAppTabs = screen === 'app'
 
   return (
     <div>
-      <Navbar user={user} tab={tab} setTab={setTab} />
+      <Navbar
+        user={user}
+        tab={tab}
+        setTab={setTab}
+        screen={screen}
+        onHome={goHome}
+        onLogin={() => setScreen('auth')}
+        onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
+      />
+
       <main style={{ paddingTop: 68 }}>
-        {tab === 'dashboard' && <DashboardScreen user={user} onUpload={() => setTab('upload')} />}
-        {tab === 'upload'    && <UploadWords user={user} />}
+        {screen === 'landing'        && <LandingScreen onStart={() => setScreen('auth')} />}
+        {screen === 'auth'           && <AuthScreen onSuccess={u => { setUser(u); setScreen('app') }} />}
+        {screen === 'reset-password' && <ResetPasswordScreen onSuccess={() => setScreen('app')} />}
+        {screen === 'app' && tab === 'dashboard' && <DashboardScreen user={user} onUpload={() => setTab('upload')} />}
+        {screen === 'app' && tab === 'upload'    && <UploadWords user={user} />}
       </main>
     </div>
   )
 }
 
-/* ─── Navbar ────────────────────────────────────────────────────── */
-function Navbar({ user, tab, setTab }) {
-  async function logout() {
-    await supabase.auth.signOut()
-    window.location.reload()
-  }
+/* ─── Navbar ─────────────────────────────────────────────────────── */
+function Navbar({ user, tab, setTab, screen, onHome, onLogin, onLogout }) {
+  const loggedIn = !!user
 
   return (
     <nav style={styles.navbar}>
-      <div style={styles.navBrand}>
+
+      {/* Brand — always a home link */}
+      <button style={styles.navBrand} onClick={onHome}>
         <span style={styles.navStar}>✦</span>
         <span style={styles.navName}>WordWise</span>
-      </div>
+      </button>
 
-      <div style={styles.navLinks}>
-        {[
-          { id: 'dashboard', label: 'דשבורד' },
-          { id: 'upload',    label: 'העלה מילים' },
-        ].map(item => (
-          <button
-            key={item.id}
-            style={{ ...styles.navLink, ...(tab === item.id ? styles.navLinkOn : {}) }}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      {/* Centre links — only when logged in */}
+      {loggedIn && (
+        <div style={styles.navLinks}>
+          {[
+            { id: 'dashboard', label: 'בית'          },
+            { id: 'upload',    label: 'העלה מילים'   },
+          ].map(item => (
+            <button
+              key={item.id}
+              style={{ ...styles.navLink, ...(screen === 'app' && tab === item.id ? styles.navLinkOn : {}) }}
+              onClick={() => { setTab(item.id) }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
 
+      {/* Right side */}
       <div style={styles.navRight}>
-        <span style={styles.navUser}>{user?.email?.split('@')[0]}</span>
-        <button style={styles.navLogout} onClick={logout}>יציאה</button>
+        {loggedIn ? (
+          <>
+            <span style={styles.navUser}>{user.email?.split('@')[0]}</span>
+            <button style={styles.navLogout} onClick={onLogout}>יציאה</button>
+          </>
+        ) : (
+          <button style={styles.navSignIn} onClick={onLogin}>
+            התחבר / הירשם
+          </button>
+        )}
       </div>
+
     </nav>
   )
 }
 
-/* ─── Landing ───────────────────────────────────────────────────── */
+/* ─── Landing ────────────────────────────────────────────────────── */
 function LandingScreen({ onStart }) {
   return (
     <div style={styles.page}>
@@ -101,7 +113,7 @@ function LandingScreen({ onStart }) {
         <div style={styles.statsRow}>
           <Stat number="8"  label="מילים בכל סיפור" />
           <Stat number="AI" label="סיפורים מותאמים" />
-          <Stat number="∞"  label="חזרות חכמות" />
+          <Stat number="∞"  label="חזרות חכמות"     />
         </div>
         <button style={styles.ctaBtn} onClick={onStart}>התחל ללמוד בחינם</button>
         <p style={styles.smallNote}>ללא כרטיס אשראי · עברית מלאה</p>
@@ -119,9 +131,9 @@ function Stat({ number, label }) {
   )
 }
 
-/* ─── Auth ──────────────────────────────────────────────────────── */
-function AuthScreen({ onBack, onSuccess }) {
-  const [view, setView]         = useState('login') // 'login' | 'register' | 'forgot'
+/* ─── Auth ───────────────────────────────────────────────────────── */
+function AuthScreen({ onSuccess }) {
+  const [view, setView]         = useState('login')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
@@ -173,9 +185,8 @@ function AuthScreen({ onBack, onSuccess }) {
   return (
     <div style={styles.page}>
       <div style={styles.authCard}>
-        <button onClick={onBack} style={styles.backBtn}>← חזור</button>
         <h2 style={styles.authTitle}>{view === 'login' ? 'ברוך הבא חזרה' : 'צור חשבון חינמי'}</h2>
-        <input style={styles.input} type="email"    placeholder="אימייל"  value={email}    onChange={e => setEmail(e.target.value)}    dir="ltr" />
+        <input style={styles.input} type="email"    placeholder="אימייל" value={email}    onChange={e => setEmail(e.target.value)}    dir="ltr" />
         <input style={styles.input} type="password" placeholder="סיסמה"  value={password} onChange={e => setPassword(e.target.value)} dir="ltr" />
         {error   && <p style={styles.errorMsg}>{error}</p>}
         {message && <p style={styles.successMsg}>{message}</p>}
@@ -195,16 +206,16 @@ function AuthScreen({ onBack, onSuccess }) {
   )
 }
 
-/* ─── Reset Password ────────────────────────────────────────────── */
+/* ─── Reset Password ─────────────────────────────────────────────── */
 function ResetPasswordScreen({ onSuccess }) {
-  const [password, setPassword]   = useState('')
-  const [confirm, setConfirm]     = useState('')
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm]   = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
 
   async function handleReset() {
-    if (password.length < 6)      { setError('סיסמה חייבת להכיל לפחות 6 תווים'); return }
-    if (password !== confirm)     { setError('הסיסמאות אינן תואמות'); return }
+    if (password.length < 6)  { setError('סיסמה חייבת להכיל לפחות 6 תווים'); return }
+    if (password !== confirm)  { setError('הסיסמאות אינן תואמות'); return }
     setLoading(true); setError('')
     const { error } = await supabase.auth.updateUser({ password })
     if (error) setError('שגיאה בעדכון הסיסמה: ' + error.message)
@@ -216,22 +227,8 @@ function ResetPasswordScreen({ onSuccess }) {
     <div style={styles.page}>
       <div style={styles.authCard}>
         <h2 style={styles.authTitle}>הגדר סיסמה חדשה</h2>
-        <input
-          style={styles.input}
-          type="password"
-          placeholder="סיסמה חדשה"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          dir="ltr"
-        />
-        <input
-          style={styles.input}
-          type="password"
-          placeholder="אשר סיסמה"
-          value={confirm}
-          onChange={e => setConfirm(e.target.value)}
-          dir="ltr"
-        />
+        <input style={styles.input} type="password" placeholder="סיסמה חדשה" value={password} onChange={e => setPassword(e.target.value)} dir="ltr" />
+        <input style={styles.input} type="password" placeholder="אשר סיסמה"   value={confirm}  onChange={e => setConfirm(e.target.value)}  dir="ltr" />
         {error && <p style={styles.errorMsg}>{error}</p>}
         <button style={{ ...styles.ctaBtn, marginTop: 8 }} onClick={handleReset} disabled={loading || !password || !confirm}>
           {loading ? 'שומר...' : 'שמור סיסמה חדשה'}
@@ -241,25 +238,18 @@ function ResetPasswordScreen({ onSuccess }) {
   )
 }
 
-/* ─── Dashboard ─────────────────────────────────────────────────── */
+/* ─── Dashboard ──────────────────────────────────────────────────── */
 function DashboardScreen({ user, onUpload }) {
   return (
     <div style={styles.page}>
       <div style={styles.hero}>
         <h2 style={{ fontSize: 28 }}>שלום, {user?.email?.split('@')[0]}! 👋</h2>
         <p style={{ color: '#94a3b8', marginTop: 8 }}>מה נלמד היום?</p>
-
         <div style={styles.dashGrid}>
-          <DashCard
-            icon="📤"
-            title="העלה מילים"
-            desc="Excel, PDF, Word, תמונה או כתיבה חופשית"
-            onClick={onUpload}
-            accent
-          />
-          <DashCard icon="📖" title="סיפורים"   desc="קרא סיפורים עם המילים שלך — בקרוב" />
-          <DashCard icon="🧠" title="תרגול"     desc="כרטיסיות חכמות — בקרוב" />
-          <DashCard icon="📊" title="התקדמות"   desc="מעקב ביצועים — בקרוב" />
+          <DashCard icon="📤" title="העלה מילים" desc="Excel, PDF, Word, תמונה או כתיבה חופשית" onClick={onUpload} accent />
+          <DashCard icon="📖" title="סיפורים"    desc="קרא סיפורים עם המילים שלך — בקרוב" />
+          <DashCard icon="🧠" title="תרגול"      desc="כרטיסיות חכמות — בקרוב" />
+          <DashCard icon="📊" title="התקדמות"    desc="מעקב ביצועים — בקרוב" />
         </div>
       </div>
     </div>
@@ -269,11 +259,7 @@ function DashboardScreen({ user, onUpload }) {
 function DashCard({ icon, title, desc, onClick, accent }) {
   return (
     <div
-      style={{
-        ...styles.dashCard,
-        ...(accent ? styles.dashCardAccent : {}),
-        cursor: onClick ? 'pointer' : 'default',
-      }}
+      style={{ ...styles.dashCard, ...(accent ? styles.dashCardAccent : {}), cursor: onClick ? 'pointer' : 'default' }}
       onClick={onClick}
     >
       <span style={styles.dashIcon}>{icon}</span>
@@ -283,9 +269,8 @@ function DashCard({ icon, title, desc, onClick, accent }) {
   )
 }
 
-/* ─── Styles ────────────────────────────────────────────────────── */
+/* ─── Styles ─────────────────────────────────────────────────────── */
 const styles = {
-  /* navbar */
   navbar: {
     position: 'fixed',
     top: 0, left: 0, right: 0,
@@ -300,9 +285,17 @@ const styles = {
     zIndex: 100,
     direction: 'rtl',
   },
-  navBrand: { display: 'flex', alignItems: 'center', gap: 8 },
-  navStar:  { color: '#a78bfa', fontSize: 18 },
-  navName:  { fontSize: 18, fontWeight: 700, color: '#fff' },
+  navBrand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+  },
+  navStar: { color: '#a78bfa', fontSize: 18 },
+  navName: { fontSize: 18, fontWeight: 700, color: '#fff' },
   navLinks: { display: 'flex', gap: 4 },
   navLink: {
     background: 'transparent',
@@ -328,10 +321,19 @@ const styles = {
     fontSize: 13,
     padding: '5px 12px',
   },
+  navSignIn: {
+    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+    border: 'none',
+    borderRadius: 8,
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 600,
+    padding: '7px 16px',
+  },
 
-  /* pages */
   page: {
-    minHeight: '100vh',
+    minHeight: 'calc(100vh - 68px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -348,7 +350,6 @@ const styles = {
     gap: 20,
   },
 
-  /* landing */
   badge: {
     background: 'rgba(99,102,241,0.15)',
     border: '1px solid rgba(99,102,241,0.4)',
@@ -363,8 +364,8 @@ const styles = {
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
   },
-  subtitle: { fontSize: 17, color: '#94a3b8', lineHeight: 1.7 },
-  statsRow: { display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' },
+  subtitle:  { fontSize: 17, color: '#94a3b8', lineHeight: 1.7 },
+  statsRow:  { display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' },
   statCard: {
     background: 'rgba(255,255,255,0.05)',
     border: '1px solid rgba(255,255,255,0.1)',
@@ -392,7 +393,6 @@ const styles = {
   },
   smallNote: { fontSize: 12, color: '#475569' },
 
-  /* auth */
   authCard: {
     background: 'rgba(255,255,255,0.04)',
     border: '1px solid rgba(255,255,255,0.1)',
@@ -405,7 +405,7 @@ const styles = {
     gap: 14,
     direction: 'rtl',
   },
-  authTitle:  { fontSize: 24, fontWeight: 700, textAlign: 'center', marginBottom: 8 },
+  authTitle: { fontSize: 24, fontWeight: 700, textAlign: 'center', marginBottom: 8 },
   input: {
     background: 'rgba(255,255,255,0.07)',
     border: '1px solid rgba(255,255,255,0.15)',
@@ -446,7 +446,6 @@ const styles = {
     marginTop: 4,
   },
 
-  /* dashboard */
   dashGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2,1fr)',
@@ -460,7 +459,6 @@ const styles = {
     borderRadius: 16,
     padding: '22px 20px',
     textAlign: 'right',
-    transition: 'border-color 0.2s',
   },
   dashCardAccent: {
     background: 'rgba(99,102,241,0.1)',
