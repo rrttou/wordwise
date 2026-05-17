@@ -1,24 +1,35 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --ink:  #1a1a2e;
+  --ink2: #4a4a6a;
+  --ink3: #8888aa;
+  --cream: #faf8f4;
+  --surface: #f0ede6;
+  --white: #ffffff;
+  --mint:  #2ec4a0;
+  --mint-l: #e8faf5;
+  --mint-d: #1a9e80;
+  --gold:  #e8a020;
+  --gold-l: #fff8e8;
+  --rose:  #e05070;
+  --rose-l: #fef0f3;
+  --sky:   #4080f0;
+  --sky-l: #eef4ff;
 }
 
 body {
-  font-family: 'Segoe UI', sans-serif;
-  background: #0f0f1a;
-  color: #fff;
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-input::placeholder {
-  color: #64748b;
-}
+input::placeholder { color: var(--ink3); }
+input { color-scheme: light; color: var(--ink); }
+textarea::placeholder { color: var(--ink3); }
 
-input {
-  color-scheme: dark;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }

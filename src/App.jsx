@@ -1,11 +1,31 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import UploadWords from './UploadWords'
+import StoryScreen from './StoryScreen'
 
-function App() {
+/* ─── Tokens ─────────────────────────────────────────────────────── */
+const c = {
+  ink:'#1a1a2e', ink2:'#4a4a6a', ink3:'#8888aa',
+  cream:'#faf8f4', surface:'#f0ede6', white:'#ffffff',
+  mint:'#2ec4a0', mintL:'#e8faf5', mintD:'#1a9e80',
+  gold:'#e8a020', goldL:'#fff8e8',
+  rose:'#e05070', roseL:'#fef0f3',
+  sky:'#4080f0',  skyL:'#eef4ff',
+  border:'rgba(0,0,0,0.08)',
+}
+
+const MOD_COLORS = [
+  { bg: c.skyL,  bar: c.sky  },
+  { bg: c.mintL, bar: c.mint },
+  { bg: c.roseL, bar: c.rose },
+  { bg: c.goldL, bar: c.gold },
+]
+
+/* ─── Root ───────────────────────────────────────────────────────── */
+export default function App() {
   const [screen, setScreen] = useState('landing')
-  const [tab, setTab]       = useState('dashboard')
-  const [user, setUser]     = useState(null)
+  const [tab,    setTab]    = useState('dashboard')
+  const [user,   setUser]   = useState(null)
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -22,76 +42,108 @@ function App() {
     else setScreen('landing')
   }
 
-  const showAppTabs = screen === 'app'
+  const isApp = screen === 'app'
 
   return (
-    <div>
-      <Navbar
-        user={user}
-        tab={tab}
-        setTab={setTab}
-        screen={screen}
+    <div style={{ background: c.cream, minHeight: '100vh' }}>
+      <TopBar
+        user={user} screen={screen}
         onHome={goHome}
         onLogin={() => setScreen('auth')}
+        onBack={() => setScreen(user ? 'app' : 'landing')}
         onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
       />
 
-      <main style={{ paddingTop: 68 }}>
+      <main style={{ paddingTop: 60, paddingBottom: isApp ? 86 : 0 }}>
         {screen === 'landing'        && <LandingScreen onStart={() => setScreen('auth')} />}
-        {screen === 'auth'           && <AuthScreen onSuccess={u => { setUser(u); setScreen('app') }} />}
+        {screen === 'auth'           && <AuthScreen    onSuccess={u => { setUser(u); setScreen('app') }} />}
         {screen === 'reset-password' && <ResetPasswordScreen onSuccess={() => setScreen('app')} />}
-        {screen === 'app' && tab === 'dashboard' && <DashboardScreen user={user} onUpload={() => setTab('upload')} />}
-        {screen === 'app' && tab === 'upload'    && <UploadWords user={user} />}
+        {isApp && tab === 'dashboard' && <DashboardScreen user={user} onUpload={() => setTab('upload')} />}
+        {isApp && tab === 'upload'    && <UploadWords user={user} />}
+        {isApp && tab === 'practice'  && <StoryScreen user={user} />}
+        {isApp && tab === 'progress'  && <ComingSoon icon="📊" label="התקדמות" />}
+        {isApp && tab === 'profile'   && (
+          <ProfileScreen
+            user={user}
+            onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
+          />
+        )}
       </main>
+
+      {isApp && <BottomNav tab={tab} setTab={setTab} />}
     </div>
   )
 }
 
-/* ─── Navbar ─────────────────────────────────────────────────────── */
-function Navbar({ user, tab, setTab, screen, onHome, onLogin, onLogout }) {
-  const loggedIn = !!user
+/* ─── Top bar ────────────────────────────────────────────────────── */
+function TopBar({ user, screen, onHome, onLogin, onBack, onLogout }) {
+  const isApp = screen === 'app'
 
   return (
-    <nav style={styles.navbar}>
-
-      {/* Brand — always a home link */}
-      <button style={styles.navBrand} onClick={onHome}>
-        <span style={styles.navStar}>✦</span>
-        <span style={styles.navName}>WordWise</span>
-      </button>
-
-      {/* Centre links — only when logged in */}
-      {loggedIn && (
-        <div style={styles.navLinks}>
-          {[
-            { id: 'dashboard', label: 'בית'          },
-            { id: 'upload',    label: 'העלה מילים'   },
-          ].map(item => (
-            <button
-              key={item.id}
-              style={{ ...styles.navLink, ...(screen === 'app' && tab === item.id ? styles.navLinkOn : {}) }}
-              onClick={() => { setTab(item.id) }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Right side */}
-      <div style={styles.navRight}>
-        {loggedIn ? (
+    <header style={s.topBar}>
+      <div style={s.wrap}>
+        {isApp ? (
           <>
-            <span style={styles.navUser}>{user.email?.split('@')[0]}</span>
-            <button style={styles.navLogout} onClick={onLogout}>יציאה</button>
+            <div style={s.greeting}>
+              שלום, <b style={{ fontWeight: 500 }}>{user?.email?.split('@')[0]}</b> 👋
+            </div>
+            <div style={s.streakPill}>
+              <span style={s.streakDot} />
+              12 ימים רצוף
+            </div>
+          </>
+        ) : screen === 'landing' ? (
+          <>
+            <button style={s.brandBtn} onClick={onHome}>
+              <span style={{ color: c.mint }}>✦</span> WordWise
+            </button>
+            <button style={s.topSignIn} onClick={onLogin}>התחבר</button>
           </>
         ) : (
-          <button style={styles.navSignIn} onClick={onLogin}>
-            התחבר / הירשם
-          </button>
+          <>
+            <button style={s.topBack} onClick={onBack}>← חזור</button>
+            <button style={s.brandBtn} onClick={onHome}>
+              <span style={{ color: c.mint }}>✦</span> WordWise
+            </button>
+          </>
         )}
       </div>
+    </header>
+  )
+}
 
+/* ─── Bottom nav ─────────────────────────────────────────────────── */
+function BottomNav({ tab, setTab }) {
+  const items = [
+    { id: 'dashboard', label: 'בית',     iconBg: c.ink },
+    { id: 'upload',    label: 'מילים',   iconBg: c.sky },
+    { id: 'practice',  label: 'תרגול',   iconBg: c.rose },
+    { id: 'progress',  label: 'התקדמות', iconBg: c.gold },
+    { id: 'profile',   label: 'פרופיל',  iconBg: c.surface, border: true },
+  ]
+  return (
+    <nav style={s.bottomNav}>
+      <div style={{ ...s.wrap, display: 'flex', padding: '8px 8px' }}>
+        {items.map(item => {
+          const on = tab === item.id
+          return (
+            <button
+              key={item.id}
+              style={{ ...s.navItem, ...(on ? s.navItemOn : {}) }}
+              onClick={() => setTab(item.id)}
+            >
+              <div style={{
+                ...s.navIcon,
+                background: item.iconBg,
+                ...(item.border ? { border: '1.5px solid rgba(0,0,0,0.12)' } : {}),
+              }} />
+              <span style={{ ...s.navLabel, color: on ? c.mintD : c.ink3 }}>
+                {item.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </nav>
   )
 }
@@ -99,34 +151,41 @@ function Navbar({ user, tab, setTab, screen, onHome, onLogin, onLogout }) {
 /* ─── Landing ────────────────────────────────────────────────────── */
 function LandingScreen({ onStart }) {
   return (
-    <div style={styles.page}>
-      <div style={styles.hero}>
-        <div style={styles.badge}>✦ לפסיכומטרי · בגרות · פטור</div>
-        <h1 style={styles.title}>
-          לומדים אנגלית<br />
-          <span style={styles.titleAccent}>דרך סיפורים</span>
-        </h1>
-        <p style={styles.subtitle}>
-          העלה מאגר מילים, קבל סיפור מותאם אישית,<br />
-          ותרגל עד שהמילים נצרבות.
-        </p>
-        <div style={styles.statsRow}>
-          <Stat number="8"  label="מילים בכל סיפור" />
-          <Stat number="AI" label="סיפורים מותאמים" />
-          <Stat number="∞"  label="חזרות חכמות"     />
-        </div>
-        <button style={styles.ctaBtn} onClick={onStart}>התחל ללמוד בחינם</button>
-        <p style={styles.smallNote}>ללא כרטיס אשראי · עברית מלאה</p>
-      </div>
-    </div>
-  )
-}
+    <div style={s.wrap}>
 
-function Stat({ number, label }) {
-  return (
-    <div style={styles.statCard}>
-      <span style={styles.statNum}>{number}</span>
-      <span style={styles.statLabel}>{label}</span>
+      {/* Hero card */}
+      <div style={s.heroCard}>
+        <div style={s.heroLabel}>✦ לפסיכומטרי · בגרות · פטור</div>
+        <div style={{ ...s.heroWord, fontSize: 42 }}>WordWise</div>
+        <div style={s.heroDef}>
+          העלה מילים ממקורות שלך — Excel, PDF, תמונה ועוד.
+          קבל סיפורים מותאמים אישית ותרגל עד שהמילים נצרבות.
+        </div>
+        <div style={s.heroActions}>
+          <button style={s.btnPrimary} onClick={onStart}>התחל ללמוד בחינם</button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={s.sectionTitle}>הסטטיסטיקות שלנו</div>
+      <div style={s.statsRow}>
+        <StatCard val="8"  lbl="מילים בסיפור" />
+        <StatCard val="AI" lbl="מותאם אישית"  />
+        <StatCard val="∞"  lbl="חזרות חכמות"  />
+      </div>
+
+      {/* Modules preview */}
+      <div style={s.sectionTitle}>מה תלמד</div>
+      <div style={s.modulesGrid}>
+        <ModuleCard i={0} icon="📤" name="העלה מילים"  sub="5 מקורות"      prog={0} />
+        <ModuleCard i={1} icon="📖" name="סיפורים"     sub="AI מותאם"      prog={0} />
+        <ModuleCard i={2} icon="🧠" name="תרגול"       sub="כרטיסיות"      prog={0} />
+        <ModuleCard i={3} icon="📊" name="התקדמות"     sub="מעקב ביצועים"  prog={0} />
+      </div>
+
+      <p style={{ textAlign: 'center', color: c.ink3, fontSize: 12, marginTop: 4, paddingBottom: 16 }}>
+        ללא כרטיס אשראי · עברית מלאה
+      </p>
     </div>
   )
 }
@@ -152,30 +211,30 @@ function AuthScreen({ onSuccess }) {
       const { error } = await supabase.auth.signUp({ email, password })
       if (error) setError('שגיאה בהרשמה, נסה שוב')
       else setMessage('נשלח אימייל אימות — בדוק את תיבת הדואר שלך')
-    } else if (view === 'forgot') {
+    } else {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin,
       })
-      if (error) setError('שגיאה בשליחת המייל: ' + error.message)
-      else setMessage('קישור לאיפוס סיסמה נשלח — בדוק את תיבת הדואר שלך')
+      if (error) setError('שגיאה בשליחת המייל')
+      else setMessage('קישור לאיפוס נשלח — בדוק את המייל שלך')
     }
     setLoading(false)
   }
 
   if (view === 'forgot') {
     return (
-      <div style={styles.page}>
-        <div style={styles.authCard}>
-          <button onClick={() => { setView('login'); reset() }} style={styles.backBtn}>← חזור להתחברות</button>
-          <h2 style={styles.authTitle}>שכחת סיסמה?</h2>
-          <p style={{ color: '#64748b', fontSize: 14, textAlign: 'center', marginBottom: 4 }}>
-            הכנס את האימייל שלך ונשלח לך קישור לאיפוס
-          </p>
-          <input style={styles.input} type="email" placeholder="אימייל" value={email} onChange={e => setEmail(e.target.value)} dir="ltr" />
-          {error   && <p style={styles.errorMsg}>{error}</p>}
-          {message && <p style={styles.successMsg}>{message}</p>}
-          <button style={{ ...styles.ctaBtn, marginTop: 8 }} onClick={handleSubmit} disabled={loading || !email}>
+      <div style={s.authPage}>
+        <div style={s.authCard}>
+          <h2 style={s.authTitle}>שכחת סיסמה?</h2>
+          <p style={s.authSub}>נשלח לך קישור לאיפוס לאימייל</p>
+          <input style={s.input} type="email" placeholder="אימייל" value={email} onChange={e => setEmail(e.target.value)} dir="ltr" />
+          {error   && <p style={s.errMsg}>{error}</p>}
+          {message && <p style={s.okMsg}>{message}</p>}
+          <button style={s.submitBtn} onClick={handleSubmit} disabled={loading || !email}>
             {loading ? 'שולח...' : 'שלח קישור לאיפוס'}
+          </button>
+          <button style={s.linkBtn} onClick={() => { setView('login'); reset() }}>
+            חזור להתחברות
           </button>
         </div>
       </div>
@@ -183,22 +242,28 @@ function AuthScreen({ onSuccess }) {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.authCard}>
-        <h2 style={styles.authTitle}>{view === 'login' ? 'ברוך הבא חזרה' : 'צור חשבון חינמי'}</h2>
-        <input style={styles.input} type="email"    placeholder="אימייל" value={email}    onChange={e => setEmail(e.target.value)}    dir="ltr" />
-        <input style={styles.input} type="password" placeholder="סיסמה"  value={password} onChange={e => setPassword(e.target.value)} dir="ltr" />
-        {error   && <p style={styles.errorMsg}>{error}</p>}
-        {message && <p style={styles.successMsg}>{message}</p>}
-        <button style={{ ...styles.ctaBtn, marginTop: 8 }} onClick={handleSubmit} disabled={loading}>
+    <div style={s.authPage}>
+      <div style={s.authCard}>
+        <h2 style={s.authTitle}>
+          {view === 'login' ? 'ברוך הבא חזרה' : 'צור חשבון חינמי'}
+        </h2>
+        <p style={s.authSub}>
+          {view === 'login' ? 'התחבר כדי להמשיך ללמוד' : 'הצטרף אלינו ולמד אנגלית חכם'}
+        </p>
+        <input style={s.input} type="email"    placeholder="אימייל" value={email}    onChange={e => setEmail(e.target.value)}    dir="ltr" />
+        <input style={s.input} type="password" placeholder="סיסמה"  value={password} onChange={e => setPassword(e.target.value)} dir="ltr" />
+        {error   && <p style={s.errMsg}>{error}</p>}
+        {message && <p style={s.okMsg}>{message}</p>}
+        <button style={s.submitBtn} onClick={handleSubmit} disabled={loading}>
           {loading ? 'רגע...' : view === 'login' ? 'התחבר' : 'הירשם'}
         </button>
         {view === 'login' && (
-          <button style={styles.forgotBtn} onClick={() => { setView('forgot'); reset() }}>
+          <button style={s.linkBtn} onClick={() => { setView('forgot'); reset() }}>
             שכחת סיסמה?
           </button>
         )}
-        <button style={styles.switchBtn} onClick={() => { setView(view === 'login' ? 'register' : 'login'); reset() }}>
+        <div style={s.divider} />
+        <button style={s.switchBtn} onClick={() => { setView(view === 'login' ? 'register' : 'login'); reset() }}>
           {view === 'login' ? 'אין לך חשבון? הירשם' : 'יש לך חשבון? התחבר'}
         </button>
       </div>
@@ -209,29 +274,30 @@ function AuthScreen({ onSuccess }) {
 /* ─── Reset Password ─────────────────────────────────────────────── */
 function ResetPasswordScreen({ onSuccess }) {
   const [password, setPassword] = useState('')
-  const [confirm, setConfirm]   = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState('')
+  const [confirm,  setConfirm]  = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
 
   async function handleReset() {
-    if (password.length < 6)  { setError('סיסמה חייבת להכיל לפחות 6 תווים'); return }
-    if (password !== confirm)  { setError('הסיסמאות אינן תואמות'); return }
+    if (password.length < 6) { setError('סיסמה חייבת להכיל לפחות 6 תווים'); return }
+    if (password !== confirm) { setError('הסיסמאות אינן תואמות'); return }
     setLoading(true); setError('')
     const { error } = await supabase.auth.updateUser({ password })
-    if (error) setError('שגיאה בעדכון הסיסמה: ' + error.message)
+    if (error) setError('שגיאה: ' + error.message)
     else onSuccess()
     setLoading(false)
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.authCard}>
-        <h2 style={styles.authTitle}>הגדר סיסמה חדשה</h2>
-        <input style={styles.input} type="password" placeholder="סיסמה חדשה" value={password} onChange={e => setPassword(e.target.value)} dir="ltr" />
-        <input style={styles.input} type="password" placeholder="אשר סיסמה"   value={confirm}  onChange={e => setConfirm(e.target.value)}  dir="ltr" />
-        {error && <p style={styles.errorMsg}>{error}</p>}
-        <button style={{ ...styles.ctaBtn, marginTop: 8 }} onClick={handleReset} disabled={loading || !password || !confirm}>
-          {loading ? 'שומר...' : 'שמור סיסמה חדשה'}
+    <div style={s.authPage}>
+      <div style={s.authCard}>
+        <h2 style={s.authTitle}>סיסמה חדשה</h2>
+        <p style={s.authSub}>בחר סיסמה חדשה לחשבון שלך</p>
+        <input style={s.input} type="password" placeholder="סיסמה חדשה" value={password} onChange={e => setPassword(e.target.value)} dir="ltr" />
+        <input style={s.input} type="password" placeholder="אשר סיסמה"   value={confirm}  onChange={e => setConfirm(e.target.value)}  dir="ltr" />
+        {error && <p style={s.errMsg}>{error}</p>}
+        <button style={s.submitBtn} onClick={handleReset} disabled={loading || !password || !confirm}>
+          {loading ? 'שומר...' : 'שמור סיסמה'}
         </button>
       </div>
     </div>
@@ -241,232 +307,438 @@ function ResetPasswordScreen({ onSuccess }) {
 /* ─── Dashboard ──────────────────────────────────────────────────── */
 function DashboardScreen({ user, onUpload }) {
   return (
-    <div style={styles.page}>
-      <div style={styles.hero}>
-        <h2 style={{ fontSize: 28 }}>שלום, {user?.email?.split('@')[0]}! 👋</h2>
-        <p style={{ color: '#94a3b8', marginTop: 8 }}>מה נלמד היום?</p>
-        <div style={styles.dashGrid}>
-          <DashCard icon="📤" title="העלה מילים" desc="Excel, PDF, Word, תמונה או כתיבה חופשית" onClick={onUpload} accent />
-          <DashCard icon="📖" title="סיפורים"    desc="קרא סיפורים עם המילים שלך — בקרוב" />
-          <DashCard icon="🧠" title="תרגול"      desc="כרטיסיות חכמות — בקרוב" />
-          <DashCard icon="📊" title="התקדמות"    desc="מעקב ביצועים — בקרוב" />
+    <div style={s.wrap}>
+
+      {/* Word of the day */}
+      <div style={s.heroCard}>
+        <div style={s.heroLabel}>מילת היום</div>
+        <div style={s.heroWord}>Ephemeral</div>
+        <div style={s.heroPhonetic}>/ɪˈfem.ər.əl/</div>
+        <div style={s.heroDef}>
+          Lasting for only a short time; transitory.{' '}
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+            "The ephemeral beauty of cherry blossoms"
+          </span>
         </div>
+        <div style={s.heroActions}>
+          <button style={s.btnPrimary}>תרגל עכשיו</button>
+          <button style={s.btnGhost}>הוסף לרשימה</button>
+        </div>
+      </div>
+
+      {/* Modules */}
+      <div style={s.sectionTitle}>מודולי לימוד</div>
+      <div style={s.modulesGrid}>
+        <ModuleCard i={0} icon="📖" name="אוצר מילים" sub="240 מילים"    prog={72} onClick={onUpload} />
+        <ModuleCard i={1} icon="✍️" name="דקדוק"      sub="18 שיעורים"  prog={45} />
+        <ModuleCard i={2} icon="🎧" name="האזנה"      sub="32 קטעים"    prog={88} />
+        <ModuleCard i={3} icon="💬" name="שיחה"        sub="15 תרחישים"  prog={30} />
+      </div>
+
+      {/* Stats */}
+      <div style={s.sectionTitle}>הסטטיסטיקות שלך</div>
+      <div style={s.statsRow}>
+        <StatCard val="347" lbl="מילים" />
+        <StatCard val="83%" lbl="דיוק"  />
+        <StatCard val="12h" lbl="שעות"  />
+      </div>
+
+    </div>
+  )
+}
+
+/* ─── Profile ────────────────────────────────────────────────────── */
+function ProfileScreen({ user, onLogout }) {
+  return (
+    <div style={s.wrap}>
+      <div style={{ ...s.heroCard, padding: '28px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>👤</div>
+        <div style={{ ...s.heroWord, fontSize: 24 }}>{user?.email?.split('@')[0]}</div>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4 }}>{user?.email}</div>
+      </div>
+      <button
+        style={{ ...s.submitBtn, background: c.surface, color: c.ink2, border: `1px solid ${c.border}`, marginTop: 20 }}
+        onClick={onLogout}
+      >
+        יציאה מהחשבון
+      </button>
+    </div>
+  )
+}
+
+/* ─── Coming Soon ────────────────────────────────────────────────── */
+function ComingSoon({ icon, label }) {
+  return (
+    <div style={{ ...s.wrap, textAlign: 'center', paddingTop: 60 }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>{icon}</div>
+      <h2 style={{ ...s.authTitle, fontFamily: "'Playfair Display', serif" }}>{label}</h2>
+      <p style={{ color: c.ink3, marginTop: 8 }}>בקרוב...</p>
+    </div>
+  )
+}
+
+/* ─── Shared small components ────────────────────────────────────── */
+function ModuleCard({ i, icon, name, sub, prog, onClick }) {
+  const col = MOD_COLORS[i % 4]
+  return (
+    <div
+      style={{ ...s.moduleCard, cursor: onClick ? 'pointer' : 'default' }}
+      onClick={onClick}
+    >
+      <div style={{ ...s.moduleIcon, background: col.bg }}>{icon}</div>
+      <div style={s.moduleName}>{name}</div>
+      <div style={s.moduleSub}>{sub}</div>
+      <div style={s.modTrack}>
+        <div style={{ ...s.modBar, background: col.bar, width: (prog || 0) + '%' }} />
       </div>
     </div>
   )
 }
 
-function DashCard({ icon, title, desc, onClick, accent }) {
+function StatCard({ val, lbl }) {
   return (
-    <div
-      style={{ ...styles.dashCard, ...(accent ? styles.dashCardAccent : {}), cursor: onClick ? 'pointer' : 'default' }}
-      onClick={onClick}
-    >
-      <span style={styles.dashIcon}>{icon}</span>
-      <h3 style={styles.dashCardTitle}>{title}</h3>
-      <p style={styles.dashCardDesc}>{desc}</p>
+    <div style={s.statCard}>
+      <div style={s.statVal}>{val}</div>
+      <div style={s.statLbl}>{lbl}</div>
     </div>
   )
 }
 
 /* ─── Styles ─────────────────────────────────────────────────────── */
-const styles = {
-  navbar: {
-    position: 'fixed',
-    top: 0, left: 0, right: 0,
-    height: 64,
-    background: 'rgba(15,15,26,0.92)',
-    backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(255,255,255,0.07)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '0 28px',
-    zIndex: 100,
+const s = {
+  /* layout */
+  wrap: {
+    maxWidth: 420,
+    margin: '0 auto',
+    padding: '20px 16px',
     direction: 'rtl',
   },
-  navBrand: {
+
+  /* top bar */
+  topBar: {
+    position: 'fixed',
+    top: 0, left: 0, right: 0,
+    height: 60,
+    background: 'rgba(250,248,244,0.94)',
+    backdropFilter: 'blur(16px)',
+    borderBottom: '1px solid rgba(0,0,0,0.07)',
+    zIndex: 100,
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 0,
   },
-  navStar: { color: '#a78bfa', fontSize: 18 },
-  navName: { fontSize: 18, fontWeight: 700, color: '#fff' },
-  navLinks: { display: 'flex', gap: 4 },
-  navLink: {
-    background: 'transparent',
-    border: 'none',
-    color: '#64748b',
-    cursor: 'pointer',
-    fontSize: 15,
-    padding: '7px 14px',
-    borderRadius: 8,
-  },
-  navLinkOn: {
-    background: 'rgba(99,102,241,0.15)',
-    color: '#a5b4fc',
-  },
-  navRight:  { display: 'flex', alignItems: 'center', gap: 12 },
-  navUser:   { color: '#475569', fontSize: 13 },
-  navLogout: {
-    background: 'transparent',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 8,
-    color: '#64748b',
-    cursor: 'pointer',
+  greeting: {
     fontSize: 13,
-    padding: '5px 12px',
+    color: c.ink3,
+    direction: 'rtl',
   },
-  navSignIn: {
-    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+  streakPill: {
+    background: c.goldL,
+    border: '1.5px solid #f0d090',
+    borderRadius: 20,
+    padding: '5px 12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#b87800',
+  },
+  streakDot: {
+    width: 12,
+    height: 12,
+    borderRadius: '50%',
+    background: c.gold,
+    flexShrink: 0,
+  },
+  brandBtn: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 16,
+    fontWeight: 600,
+    color: c.ink,
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+  },
+  topSignIn: {
+    background: c.mint,
     border: 'none',
     borderRadius: 8,
     color: '#fff',
     cursor: 'pointer',
     fontSize: 13,
-    fontWeight: 600,
-    padding: '7px 16px',
+    fontWeight: 500,
+    padding: '7px 14px',
+  },
+  topBack: {
+    background: 'transparent',
+    border: 'none',
+    color: c.ink3,
+    cursor: 'pointer',
+    fontSize: 14,
+    padding: 0,
   },
 
-  page: {
-    minHeight: 'calc(100vh - 68px)',
+  /* bottom nav */
+  bottomNav: {
+    position: 'fixed',
+    bottom: 0, left: 0, right: 0,
+    background: c.white,
+    borderTop: '1px solid rgba(0,0,0,0.07)',
+    zIndex: 100,
+  },
+  navItem: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 3,
+    padding: '8px 4px',
+    borderRadius: 8,
+    cursor: 'pointer',
+    background: 'transparent',
+    border: 'none',
+  },
+  navItemOn: {
+    background: c.mintL,
+  },
+  navIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+  },
+  navLabel: {
+    fontSize: 9,
+    fontWeight: 500,
+    letterSpacing: '0.5px',
+  },
+
+  /* hero card */
+  heroCard: {
+    background: c.ink,
+    borderRadius: 14,
+    padding: '22px 20px 20px',
+    marginBottom: 20,
+    position: 'relative',
+    overflow: 'hidden',
+    direction: 'rtl',
+  },
+  heroLabel: {
+    fontSize: 11,
+    fontWeight: 500,
+    letterSpacing: '1.5px',
+    color: c.mint,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  heroWord: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 38,
+    fontWeight: 600,
+    color: '#fff',
+    marginBottom: 4,
+    lineHeight: 1.1,
+  },
+  heroPhonetic: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  heroDef: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.72)',
+    lineHeight: 1.55,
+    marginBottom: 18,
+  },
+  heroActions: { display: 'flex', gap: 8 },
+  btnPrimary: {
+    background: c.mint,
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    padding: '9px 18px',
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  btnGhost: {
+    background: 'rgba(255,255,255,0.08)',
+    color: 'rgba(255,255,255,0.7)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: 8,
+    padding: '9px 14px',
+    fontSize: 13,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+
+  /* section title */
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: 500,
+    letterSpacing: '1.2px',
+    textTransform: 'uppercase',
+    color: c.ink3,
+    marginBottom: 12,
+    direction: 'rtl',
+  },
+
+  /* modules grid */
+  modulesGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 10,
+    marginBottom: 24,
+  },
+  moduleCard: {
+    background: c.white,
+    border: `1px solid ${c.border}`,
+    borderRadius: 14,
+    padding: 16,
+    direction: 'rtl',
+  },
+  moduleIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '24px',
-    direction: 'rtl',
+    marginBottom: 10,
+    fontSize: 16,
   },
-  hero: {
-    maxWidth: 560,
-    width: '100%',
-    textAlign: 'center',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 20,
+  moduleName: { fontSize: 13, fontWeight: 500, marginBottom: 3 },
+  moduleSub:  { fontSize: 11, color: c.ink3 },
+  modTrack: {
+    height: 3,
+    background: '#eee',
+    borderRadius: 2,
+    marginTop: 10,
+    overflow: 'hidden',
+  },
+  modBar: {
+    height: '100%',
+    borderRadius: 2,
+    transition: 'width 0.3s',
   },
 
-  badge: {
-    background: 'rgba(99,102,241,0.15)',
-    border: '1px solid rgba(99,102,241,0.4)',
-    color: '#a5b4fc',
-    padding: '6px 16px',
-    borderRadius: 20,
-    fontSize: 13,
+  /* stats row */
+  statsRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3,1fr)',
+    gap: 8,
+    marginBottom: 24,
   },
-  title: { fontSize: 48, fontWeight: 700, lineHeight: 1.2 },
-  titleAccent: {
-    background: 'linear-gradient(135deg,#6366f1,#a78bfa)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-  },
-  subtitle:  { fontSize: 17, color: '#94a3b8', lineHeight: 1.7 },
-  statsRow:  { display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' },
   statCard: {
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: '14px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 100,
-  },
-  statNum:   { fontSize: 26, fontWeight: 700, color: '#a78bfa' },
-  statLabel: { fontSize: 12, color: '#64748b' },
-  ctaBtn: {
-    background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-    color: '#fff',
-    border: 'none',
+    background: c.white,
+    border: `1px solid ${c.border}`,
     borderRadius: 14,
-    padding: '16px 40px',
-    fontSize: 17,
-    fontWeight: 600,
-    cursor: 'pointer',
-    width: '100%',
-    maxWidth: 320,
+    padding: '14px 12px',
+    textAlign: 'center',
   },
-  smallNote: { fontSize: 12, color: '#475569' },
+  statVal: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 22,
+    fontWeight: 600,
+    color: c.ink,
+  },
+  statLbl: {
+    fontSize: 10,
+    fontWeight: 500,
+    letterSpacing: '0.8px',
+    textTransform: 'uppercase',
+    color: c.ink3,
+    marginTop: 3,
+  },
 
-  authCard: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 20,
-    padding: '40px 32px',
-    width: '100%',
-    maxWidth: 400,
+  /* auth */
+  authPage: {
+    maxWidth: 420,
+    margin: '0 auto',
+    padding: '20px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 14,
+    alignItems: 'stretch',
+    minHeight: 'calc(100vh - 60px)',
+    justifyContent: 'center',
     direction: 'rtl',
   },
-  authTitle: { fontSize: 24, fontWeight: 700, textAlign: 'center', marginBottom: 8 },
+  authCard: {
+    background: c.white,
+    border: `1px solid ${c.border}`,
+    borderRadius: 16,
+    padding: '32px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  authTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 24,
+    fontWeight: 600,
+    color: c.ink,
+    textAlign: 'center',
+  },
+  authSub: {
+    fontSize: 13,
+    color: c.ink3,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
   input: {
-    background: 'rgba(255,255,255,0.07)',
-    border: '1px solid rgba(255,255,255,0.15)',
+    background: c.surface,
+    border: `1.5px solid ${c.border}`,
     borderRadius: 10,
-    padding: '14px 16px',
-    fontSize: 15,
-    color: '#fff',
+    padding: '13px 14px',
+    fontSize: 14,
+    color: c.ink,
     outline: 'none',
     width: '100%',
+    fontFamily: 'inherit',
   },
-  errorMsg:   { color: '#f87171', fontSize: 13, textAlign: 'center' },
-  successMsg: { color: '#4ade80', fontSize: 13, textAlign: 'center' },
-  backBtn: {
-    background: 'transparent',
+  submitBtn: {
+    background: c.mint,
+    color: '#fff',
     border: 'none',
-    color: '#94a3b8',
-    cursor: 'pointer',
+    borderRadius: 10,
+    padding: '14px',
     fontSize: 15,
-    textAlign: 'right',
-    padding: 0,
+    fontWeight: 500,
+    cursor: 'pointer',
+    width: '100%',
+    fontFamily: 'inherit',
+    marginTop: 4,
   },
-  forgotBtn: {
+  linkBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#64748b',
+    color: c.ink3,
     cursor: 'pointer',
     fontSize: 13,
     textAlign: 'center',
-    marginTop: 2,
+    padding: '4px 0',
+    fontFamily: 'inherit',
+  },
+  divider: {
+    height: 1,
+    background: c.border,
+    margin: '4px 0',
   },
   switchBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#6366f1',
+    color: c.mint,
     cursor: 'pointer',
     fontSize: 14,
+    fontWeight: 500,
     textAlign: 'center',
-    marginTop: 4,
+    padding: '4px 0',
+    fontFamily: 'inherit',
   },
-
-  dashGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2,1fr)',
-    gap: 14,
-    width: '100%',
-    marginTop: 8,
-  },
-  dashCard: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.09)',
-    borderRadius: 16,
-    padding: '22px 20px',
-    textAlign: 'right',
-  },
-  dashCardAccent: {
-    background: 'rgba(99,102,241,0.1)',
-    border: '1px solid rgba(99,102,241,0.35)',
-  },
-  dashIcon:      { fontSize: 28 },
-  dashCardTitle: { fontSize: 16, fontWeight: 600, marginTop: 10, marginBottom: 6 },
-  dashCardDesc:  { fontSize: 13, color: '#64748b', lineHeight: 1.5 },
+  errMsg: { color: c.rose, fontSize: 12, textAlign: 'center' },
+  okMsg:  { color: c.mintD, fontSize: 12, textAlign: 'center' },
 }
-
-export default App
