@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import UploadWords from './UploadWords'
 import StoryScreen from './StoryScreen'
+import PlacementTestScreen from './PlacementTest'
 
 /* ─── Tokens ─────────────────────────────────────────────────────── */
 const c = {
@@ -28,14 +29,35 @@ export default function App() {
   const [user,   setUser]   = useState(null)
 
   useEffect(() => {
+    async function restoreSession() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) await enterApp(session.user)
+    }
+    restoreSession()
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setUser(session?.user ?? null)
         setScreen('reset-password')
       }
+      if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setScreen('landing')
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  async function enterApp(u) {
+    setUser(u)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_tested')
+      .eq('id', u.id)
+      .single()
+    if (profile?.is_tested === false) setScreen('placement-test')
+    else { setTab('dashboard'); setScreen('app') }
+  }
 
   function goHome() {
     if (user) { setTab('dashboard'); setScreen('app') }
@@ -55,9 +77,10 @@ export default function App() {
       />
 
       <main style={{ paddingTop: 60, paddingBottom: isApp ? 86 : 0 }}>
-        {screen === 'landing'        && <LandingScreen onStart={() => setScreen('auth')} />}
-        {screen === 'auth'           && <AuthScreen    onSuccess={u => { setUser(u); setScreen('app') }} />}
-        {screen === 'reset-password' && <ResetPasswordScreen onSuccess={() => setScreen('app')} />}
+        {screen === 'landing'          && <LandingScreen onStart={() => setScreen('auth')} />}
+        {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
+        {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
+        {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
         {isApp && tab === 'dashboard' && <DashboardScreen user={user} onUpload={() => setTab('upload')} />}
         {isApp && tab === 'upload'    && <UploadWords user={user} />}
         {isApp && tab === 'practice'  && <StoryScreen user={user} />}

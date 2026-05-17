@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`
-
 const MIN_WORDS = 4
 const MAX_WORDS = 8
 
@@ -19,24 +16,12 @@ const c = {
 }
 
 async function callGemini(words) {
-  const wordList = words.join(', ')
-  const prompt = `Write a short, engaging story in English (around 150–200 words) that naturally uses ALL of the following vocabulary words: ${wordList}.
-
-Rules:
-- Every word in the list must appear at least once
-- The story should flow naturally — do not force the words awkwardly
-- Use clear language suitable for language learners
-- Include a small narrative arc (a beginning, a turn, and an end)
-- Do NOT add a title, commentary, or explanation — output only the story text`
-
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+  const { data, error } = await supabase.functions.invoke('generate-story', {
+    body: { words },
   })
-  if (!res.ok) throw new Error(`Gemini error: ${res.status}`)
-  const json = await res.json()
-  return json.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  if (error) throw new Error(error.message)
+  if (!data?.story) throw new Error('Empty response from server')
+  return data.story
 }
 
 function StoryText({ text, words }) {
