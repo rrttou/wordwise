@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from './supabase'
+import { supabase, supabaseMissingConfig } from './supabase'
 import UploadWords from './UploadWords'
 import StoryScreen from './StoryScreen'
 import PlacementTestScreen from './PlacementTest'
@@ -24,12 +24,16 @@ const MOD_COLORS = [
 
 /* ─── Root ───────────────────────────────────────────────────────── */
 export default function App() {
+  if (supabaseMissingConfig) throw new Error('חסרות משתני סביבה: VITE_SUPABASE_URL ו-VITE_SUPABASE_ANON_KEY')
+
   const [screen,      setScreen]      = useState('landing')
   const [tab,         setTab]         = useState('dashboard')
   const [user,        setUser]        = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
+    const timeout = setTimeout(() => setAuthLoading(false), 5000)
+
     async function restoreSession() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
@@ -37,6 +41,7 @@ export default function App() {
       } catch (err) {
         console.error('שגיאת Auth:', err)
       } finally {
+        clearTimeout(timeout)
         setAuthLoading(false)
       }
     }
