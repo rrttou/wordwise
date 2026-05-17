@@ -24,14 +24,21 @@ const MOD_COLORS = [
 
 /* ─── Root ───────────────────────────────────────────────────────── */
 export default function App() {
-  const [screen, setScreen] = useState('landing')
-  const [tab,    setTab]    = useState('dashboard')
-  const [user,   setUser]   = useState(null)
+  const [screen,      setScreen]      = useState('landing')
+  const [tab,         setTab]         = useState('dashboard')
+  const [user,        setUser]        = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
     async function restoreSession() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) await enterApp(session.user)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user) await enterApp(session.user)
+      } catch (err) {
+        console.error('שגיאת Auth:', err)
+      } finally {
+        setAuthLoading(false)
+      }
     }
     restoreSession()
 
@@ -62,6 +69,18 @@ export default function App() {
   function goHome() {
     if (user) { setTab('dashboard'); setScreen('app') }
     else setScreen('landing')
+  }
+
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', background: c.cream, flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ fontSize: 28, color: c.mint }}>✦</div>
+        <p style={{ color: c.ink3, fontSize: 14, fontFamily: 'sans-serif' }}>טוען...</p>
+      </div>
+    )
   }
 
   const isApp = screen === 'app'
