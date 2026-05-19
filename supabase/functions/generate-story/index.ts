@@ -8,7 +8,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { words, level, wordCount } = await req.json()
+    const { words, level, wordCount, reviewWords } = await req.json()
 
     if (!Array.isArray(words) || words.length < 4) {
       return new Response(
@@ -27,6 +27,9 @@ Deno.serve(async (req) => {
 
     const targetWords = wordCount ?? 150
     const levelNote = level ? ` The language level should be ${level}.` : ''
+    const reviewNote = Array.isArray(reviewWords) && reviewWords.length
+      ? `\n- Try to naturally include 2–3 of these previously learned words as well: ${reviewWords.join(', ')}`
+      : ''
     const prompt = `Write a short, engaging story in English (around ${targetWords} words) that naturally uses ALL of the following vocabulary words: ${words.join(', ')}.
 
 Rules:
@@ -34,7 +37,7 @@ Rules:
 - The story should flow naturally — do not force the words awkwardly
 - Use clear language suitable for language learners${levelNote}
 - Include a small narrative arc (a beginning, a turn, and an end)
-- Do NOT add a title, commentary, or explanation — output only the story text`
+- Do NOT add a title, commentary, or explanation — output only the story text${reviewNote}`
 
     const geminiUrl =
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`
@@ -42,7 +45,10 @@ Rules:
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+      }),
     })
 
     if (!geminiRes.ok) {

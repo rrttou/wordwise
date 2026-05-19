@@ -1,0 +1,3 @@
+ALTER TABLE user_words
+  ADD COLUMN IF NOT EXISTS wrong_count  integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS story_count  integer NOT NULL DEFAULT 0;

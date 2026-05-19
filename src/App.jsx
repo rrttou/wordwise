@@ -3,6 +3,7 @@ import { supabase, supabaseMissingConfig } from './supabase'
 import UploadWords from './UploadWords'
 import StoryScreen from './StoryScreen'
 import PlacementTestScreen from './PlacementTest'
+import PracticeScreen from './PracticeScreen'
 
 /* ─── Tokens ─────────────────────────────────────────────────────── */
 const c = {
@@ -107,7 +108,7 @@ export default function App() {
         {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
         {isApp && tab === 'dashboard' && <DashboardScreen user={user} onUpload={() => setTab('upload')} />}
         {isApp && tab === 'upload'    && <UploadWords user={user} />}
-        {isApp && tab === 'practice'  && <StoryScreen user={user} />}
+        {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
         {isApp && tab === 'progress'  && <ComingSoon icon="📊" label="התקדמות" />}
         {isApp && tab === 'profile'   && (
           <ProfileScreen

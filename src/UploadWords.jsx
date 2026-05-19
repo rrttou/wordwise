@@ -70,7 +70,9 @@ export default function UploadWords({ user }) {
   async function loadBank() {
     setLoadingBank(true)
     const { data, error } = await supabase
-      .from('user_words').select('word,source,created_at').order('created_at', { ascending: false })
+      .from('user_words')
+      .select('word, source, translation, level, created_at')
+      .order('created_at', { ascending: false })
     setLoadingBank(false)
     if (error) {
       if (error.code === '42P01' || error.message.includes('does not exist')) setSetup(true)
@@ -137,15 +139,97 @@ export default function UploadWords({ user }) {
   async function saveWords() {
     if (!extracted.length) return
     setSaving(true)
-    const rows = extracted.map(word => ({ user_id: user.id, word, source: src }))
+    const wordsToSave = [...extracted]
+    const rows = wordsToSave.map(word => ({ user_id: user.id, word, source: src }))
     const { error } = await supabase.from('user_words').upsert(rows, { onConflict: 'user_id,word' })
     if (error) {
       if (error.code === '42P01') setSetup(true)
       else showToast('error', 'שגיאה בשמירה: ' + error.message)
-    } else {
-      showToast('success', `✓ ${extracted.length} מילים נשמרו!`)
-      setExtracted([]); loadBank()
+      setSaving(false)
+      return
     }
+    setExtracted([])
+    const alreadyTranslated = new Set(saved.filter(w => w.translation).map(w => w.word))
+    const needsTranslation = wordsToSave.filter(w => !alreadyTranslated.has(w))
+    if (needsTranslation.length) {
+      showToast('success', `✓ ${wordsToSave.length} מילים נשמרו — מתרגם ${needsTranslation.length}...`)
+      await enrichWords(needsTranslation)
+    } else {
+      showToast('success', `✓ ${wordsToSave.length} מילים נשמרו`)
+    }
+    loadBank()
+    setSaving(false)
+  }
+
+  const VALID_LEVELS = new Set(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+
+  const BATCH_SIZE = 80
+
+  async function enrichWords(words) {
+    const unique = [...new Set(words)]
+    if (!unique.length) return
+    setStatus('מתרגם מילים עם AI...')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const headers = {
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }
+
+      const allEnriched = []
+      for (let i = 0; i < unique.length; i += BATCH_SIZE) {
+        const chunk = unique.slice(i, i + BATCH_SIZE)
+        if (unique.length > BATCH_SIZE)
+          setStatus(`מתרגם... ${Math.min(i + BATCH_SIZE, unique.length)}/${unique.length}`)
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-words`,
+          { method: 'POST', headers, body: JSON.stringify({ words: chunk }) }
+        )
+        const text = await res.text()
+        if (!res.ok) {
+          showToast('error', `שגיאת תרגום (${res.status}): ${text.slice(0, 120)}`)
+          return
+        }
+        const enriched = JSON.parse(text)
+        if (Array.isArray(enriched)) allEnriched.push(...enriched)
+      }
+
+      if (!allEnriched.length) {
+        showToast('error', 'הפונקציה לא החזירה תרגומים')
+        return
+      }
+      const results = await Promise.all(
+        allEnriched.map(item =>
+          supabase.from('user_words')
+            .update({
+              translation: item.translation ?? null,
+              level: VALID_LEVELS.has(item.level) ? item.level : null,
+            })
+            .eq('user_id', user.id)
+            .eq('word', item.word)
+        )
+      )
+      const failed = results.filter(r => r.error)
+      if (failed.length) {
+        showToast('error', 'שגיאה בעדכון: ' + failed[0].error.message)
+      } else {
+        showToast('success', `✓ תורגמו ${allEnriched.length} מילים!`)
+      }
+    } catch (err) {
+      showToast('error', 'שגיאת תרגום: ' + err.message)
+    } finally {
+      setStatus('')
+    }
+  }
+
+  async function translateMissing() {
+    const missing = saved.filter(w => !w.translation).map(w => w.word)
+    if (!missing.length) return
+    setSaving(true)
+    await enrichWords(missing)
+    loadBank()
     setSaving(false)
   }
 
@@ -274,15 +358,22 @@ export default function UploadWords({ user }) {
             <h3 style={s.bankTitle}>מאגר המילים שלי</h3>
             <span style={s.bankBadge}>{saved.length}</span>
           </div>
-          {saved.length > 0 && (
-            <input
-              style={s.filterInput}
-              placeholder="🔍 חיפוש..."
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              dir="ltr"
-            />
-          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {saved.some(w => !w.translation) && (
+              <button style={s.translateBtn} onClick={translateMissing} disabled={saving}>
+                {saving ? '...' : '✦ תרגם חסרים'}
+              </button>
+            )}
+            {saved.length > 0 && (
+              <input
+                style={s.filterInput}
+                placeholder="🔍 חיפוש..."
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                dir="ltr"
+              />
+            )}
+          </div>
         </div>
 
         {loadingBank ? (
@@ -294,10 +385,13 @@ export default function UploadWords({ user }) {
           </div>
         ) : (
           <div style={s.chips}>
-            {filteredBank.map(({ word, source }) => (
+            {filteredBank.map(({ word, source, translation }) => (
               <span key={word} style={s.savedChip}>
                 <span style={{ fontSize: 11 }}>{SRC_ICON[source] || '📌'}</span>
-                {word}
+                <span>
+                  {word}
+                  {translation && <span style={s.chipTranslation}> · {translation}</span>}
+                </span>
                 <button style={s.chipX} onClick={() => deleteWord(word)}>×</button>
               </span>
             ))}
@@ -545,6 +639,19 @@ const s = {
     display: 'flex',
     alignItems: 'center',
     gap: 5,
+  },
+  chipTranslation: { color: c.ink3, fontSize: 11 },
+  translateBtn: {
+    background: c.mintL,
+    border: `1px solid ${c.mint}`,
+    borderRadius: 8,
+    color: c.mintD,
+    cursor: 'pointer',
+    fontSize: 11,
+    fontWeight: 500,
+    padding: '5px 10px',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
   },
   chipX: {
     background: 'transparent',
