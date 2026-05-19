@@ -34,30 +34,36 @@ export default function App() {
 
   useEffect(() => {
     const timeout = setTimeout(() => setAuthLoading(false), 5000)
-
-    async function restoreSession() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user) await enterApp(session.user)
-      } catch (err) {
-        console.error('שגיאת Auth:', err)
-      } finally {
-        clearTimeout(timeout)
-        setAuthLoading(false)
-      }
-    }
-    restoreSession()
+    let isRecovery = false
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
+        isRecovery = true
         setUser(session?.user ?? null)
         setScreen('reset-password')
+        setAuthLoading(false)
+        clearTimeout(timeout)
       }
       if (event === 'SIGNED_OUT') {
         setUser(null)
         setScreen('landing')
       }
     })
+
+    async function restoreSession() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user && !isRecovery) await enterApp(session.user)
+      } catch (err) {
+        console.error('שגיאת Auth:', err)
+      } finally {
+        if (!isRecovery) {
+          clearTimeout(timeout)
+          setAuthLoading(false)
+        }
+      }
+    }
+    restoreSession()
     return () => subscription.unsubscribe()
   }, [])
 
