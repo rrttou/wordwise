@@ -52,12 +52,14 @@ function StoryText({ text, selectedWords, translationMap }) {
 }
 
 /* ─── Main ───────────────────────────────────────────────────────── */
-export default function StoryScreen({ user, onBack }) {
+export default function StoryScreen({ user, onBack, initialWords }) {
   const [bank, setBank]         = useState([])
   const [loading, setLoading]   = useState(true)
   const [mode, setMode]         = useState('pick')
   const [levelFilter, setLevel] = useState('all')
-  const [selected, setSelected] = useState([])
+  const [selected, setSelected] = useState(() =>
+    initialWords?.length ? initialWords.map(w => typeof w === 'string' ? w : w.word) : []
+  )
   const [typeInput, setInput]   = useState('')
   const [story, setStory]       = useState('')
   const [generating, setGen]    = useState(false)
@@ -85,7 +87,7 @@ export default function StoryScreen({ user, onBack }) {
 
   async function loadBank(src) {
     setLoading(true)
-    setSelected([])
+    if (!initialWords?.length) setSelected([])
     setStory('')
     setError('')
     if (src === 'global') {

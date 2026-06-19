@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import StoryScreen from './StoryScreen'
 import { useSession } from './SessionContext'
 import MemoryGame from './MemoryGame'
+import WordPicker from './WordPicker'
 
 const QUIZ_LENGTH = 10
 const MIN_PICK    = 4
@@ -58,49 +59,16 @@ export default function PracticeScreen({ user }) {
     else { setExType(exerciseType); setView(exerciseType) }
   }
 
-  if (view === 'story') return <StoryScreen user={user} onBack={goHub} />
-
-  if (view === 'source') return (
-    <SourceView
-      user={user}
-      onBack={goHub}
-      onOwn={() => { setSource('own'); setView(dest) }}
-      onLevel={() => setView('level-pick')}
-      onPick={() => setView('pick')}
-      onType={() => setView('type-words')}
-      onWrong={() => { setSource('wrong'); setView(dest) }}
-      onQuickRandom={words => startWithWords(words)}
-    />
+  if (view === 'word-picker') return (
+    <WordPicker user={user} onDone={startWithWords} onCancel={goHub} />
   )
 
-  if (view === 'level-pick') return (
-    <LevelView
-      user={user}
-      onBack={() => setView('source')}
-      onStart={words => startWithWords(words)}
-    />
-  )
-
-  if (view === 'pick') return (
-    <PickView
-      user={user}
-      onBack={() => setView('source')}
-      onStart={words => startWithWords(words)}
-    />
-  )
-
-  if (view === 'type-words') return (
-    <TypeView
-      user={user}
-      onBack={() => setView('source')}
-      onStart={words => startWithWords(words)}
-    />
-  )
+  if (view === 'story') return <StoryScreen user={user} onBack={goHub} initialWords={customWords} />
 
   if (view === 'quiz') return (
     <QuizView
       user={user} direction={dir} source={source} customWords={customWords}
-      onBack={() => setView('source')}
+      onBack={goHub}
       onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
     />
   )
@@ -108,7 +76,7 @@ export default function PracticeScreen({ user }) {
   if (view === 'write') return (
     <SentenceWriteView
       user={user} source={source} customWords={customWords}
-      onBack={() => setView('source')}
+      onBack={goHub}
       onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
     />
   )
@@ -116,7 +84,7 @@ export default function PracticeScreen({ user }) {
   if (view === 'match') return (
     <SentenceMatchView
       user={user} source={source} customWords={customWords}
-      onBack={() => setView('source')}
+      onBack={goHub}
       onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
     />
   )
@@ -124,7 +92,7 @@ export default function PracticeScreen({ user }) {
   if (view === 'grammar') return (
     <GrammarQuizView
       user={user} source={source} customWords={customWords}
-      onBack={() => setView('source')}
+      onBack={goHub}
       onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
     />
   )
@@ -152,16 +120,11 @@ export default function PracticeScreen({ user }) {
       pastSessions={pastSessions}
       onLoadSession={s => setCurrentWords(s.words)}
       onStartWithCurrent={startWithCurrent}
-      onChooseWords={exerciseType => {
-        setExType(exerciseType === 'quiz' ? 'quiz' : exerciseType)
-        setView('source')
+      onPickWords={(type, param) => {
+        setExType(type)
+        if (type === 'quiz') setDir(param ?? 'en-he')
+        setView('word-picker')
       }}
-      onStart={d => { setDir(d); setExType('quiz'); setView('source') }}
-      onStory={() => setView('story')}
-      onSentenceWrite={() => { setExType('write'); setView('source') }}
-      onSentenceMatch={() => { setExType('match'); setView('source') }}
-      onGrammar={() => { setExType('grammar'); setView('source') }}
-      onMemory={() => { setExType('memory'); setView('source') }}
     />
   )
 }
@@ -175,8 +138,7 @@ function monthLabel(iso) {
 
 /* ─── Hub ────────────────────────────────────────────────────────── */
 function HubView({
-  onStart, onStory, onSentenceWrite, onSentenceMatch, onGrammar, onMemory,
-  onChooseWords, onStartWithCurrent,
+  onPickWords, onStartWithCurrent,
   currentWords, wordCount, setWordCount,
   pastSessions, onLoadSession,
 }) {
@@ -192,14 +154,7 @@ function HubView({
 
   function modeClick(type, param) {
     if (hasCurrent) onStartWithCurrent(type, param)
-    else {
-      if (type === 'quiz')    onStart(param)
-      else if (type === 'story')   onStory()
-      else if (type === 'write')   onSentenceWrite()
-      else if (type === 'match')   onSentenceMatch()
-      else if (type === 'grammar') onGrammar()
-      else if (type === 'memory')  onMemory()
-    }
+    else onPickWords(type, param)
   }
 
   return (
@@ -223,7 +178,7 @@ function HubView({
           </div>
           <div style={s.currentFooter}>
             <span style={s.currentCount}>{currentWords.length} מילים</span>
-            <button style={s.changeBtn} onClick={() => onChooseWords('quiz')}>שנה מילים</button>
+            <button style={s.changeBtn} onClick={() => onPickWords('quiz')}>שנה מילים</button>
           </div>
         </div>
       )}
@@ -319,361 +274,6 @@ function HubView({
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-/* ─── Source selection ───────────────────────────────────────────── */
-function SourceView({ user, onBack, onOwn, onLevel, onPick, onType, onWrong, onQuickRandom }) {
-  const { wordCount, setWordCount } = useSession()
-  const [wrongCount,   setWrongCount]   = useState(null)
-  const [randLoading,  setRandLoading]  = useState(false)
-
-  useEffect(() => {
-    supabase.from('user_words')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .gt('wrong_count', 0)
-      .not('translation', 'is', null)
-      .then(({ count }) => setWrongCount(count ?? 0))
-  }, [])
-
-  async function handleQuickRandom() {
-    setRandLoading(true)
-    const { data } = await supabase
-      .from('user_words')
-      .select('id, word, translation, level, correct_streak, wrong_count')
-      .eq('user_id', user.id)
-      .not('translation', 'is', null)
-    const picked = shuffle(data ?? []).slice(0, wordCount)
-    setRandLoading(false)
-    if (picked.length < MIN_PICK) return
-    onQuickRandom(picked)
-  }
-
-  return (
-    <div style={s.wrap}>
-      <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
-      </div>
-      <div style={s.pageHeader}>
-        <h2 style={s.pageTitle}>בחר מילים</h2>
-        <p style={s.pageSub}>מאיפה תרגל?</p>
-      </div>
-
-      {/* Quick random */}
-      <div style={s.quickRow}>
-        <div style={s.stepper}>
-          <button style={s.stepBtn} onClick={() => setWordCount(Math.max(4, wordCount - 2))}>−</button>
-          <span style={s.stepVal}>{wordCount}</span>
-          <button style={s.stepBtn} onClick={() => setWordCount(Math.min(30, wordCount + 2))}>+</button>
-        </div>
-        <button style={s.quickRandBtn} onClick={handleQuickRandom} disabled={randLoading}>
-          {randLoading ? '...' : `✦ ${wordCount} מילים אקראיות`}
-        </button>
-      </div>
-
-      <button style={s.sourceCard} onClick={onOwn}>
-        <div style={s.sourceIcon}>📚</div>
-        <div>
-          <div style={s.sourceTitle}>כל המילים שלי</div>
-          <div style={s.sourceSub}>תרגל מכל המילים שהוספת, באקראי</div>
-        </div>
-        <span style={{ color: c.ink3, marginRight: 'auto' }}>←</span>
-      </button>
-
-      <button style={s.sourceCard} onClick={onLevel}>
-        <div style={s.sourceIcon}>🎯</div>
-        <div>
-          <div style={s.sourceTitle}>לפי רמה</div>
-          <div style={s.sourceSub}>סנן מילים לפי רמת CEFR (A1–C2)</div>
-        </div>
-        <span style={{ color: c.ink3, marginRight: 'auto' }}>←</span>
-      </button>
-
-      <button style={s.sourceCard} onClick={onPick}>
-        <div style={s.sourceIcon}>✏️</div>
-        <div>
-          <div style={s.sourceTitle}>בחר מילים ידנית</div>
-          <div style={s.sourceSub}>סמן בדיוק אילו מילים לתרגל</div>
-        </div>
-        <span style={{ color: c.ink3, marginRight: 'auto' }}>←</span>
-      </button>
-
-      <button style={s.sourceCard} onClick={onType}>
-        <div style={s.sourceIcon}>⌨️</div>
-        <div>
-          <div style={s.sourceTitle}>הזן מילים</div>
-          <div style={s.sourceSub}>הקלד את המילים שתרצה לתרגל</div>
-        </div>
-        <span style={{ color: c.ink3, marginRight: 'auto' }}>←</span>
-      </button>
-
-      <button
-        style={{ ...s.sourceCard, ...(wrongCount === 0 ? s.sourceCardDisabled : {}) }}
-        onClick={wrongCount > 0 ? onWrong : undefined}
-        disabled={wrongCount === 0}
-      >
-        <div style={s.sourceIcon}>❌</div>
-        <div>
-          <div style={s.sourceTitle}>מילים שטעיתי בהן</div>
-          <div style={s.sourceSub}>
-            {wrongCount === null ? 'טוען...' :
-             wrongCount === 0 ? 'אין מילים שגויות — כל הכבוד!' :
-             `${wrongCount} מילים לתרגול חוזר`}
-          </div>
-        </div>
-        <span style={{ color: c.ink3, marginRight: 'auto' }}>←</span>
-      </button>
-    </div>
-  )
-}
-
-/* ─── Word picker ────────────────────────────────────────────────── */
-function PickView({ user, onBack, onStart }) {
-  const { wordCount } = useSession()
-  const [words, setWords]       = useState([])
-  const [selected, setSelected] = useState([])
-  const [loading, setLoading]   = useState(true)
-
-  useEffect(() => {
-    supabase.from('user_words')
-      .select('id, word, translation, level, correct_streak, wrong_count')
-      .eq('user_id', user.id)
-      .not('translation', 'is', null)
-      .order('word')
-      .then(({ data }) => { setWords(data ?? []); setLoading(false) })
-  }, [])
-
-  function toggle(w) {
-    setSelected(prev =>
-      prev.find(p => p.id === w.id) ? prev.filter(p => p.id !== w.id) : [...prev, w]
-    )
-  }
-
-  function pickRandom() {
-    setSelected(shuffle(words).slice(0, Math.min(wordCount, words.length)))
-  }
-
-  if (loading) return <Spinner label="טוען מילים..." />
-
-  if (!words.length) return (
-    <div style={{ ...s.wrap, textAlign: 'center', paddingTop: 60 }}>
-      <p style={{ color: c.ink3, marginBottom: 20 }}>אין מילים עם תרגום — הוסף ותרגם מילים תחילה</p>
-      <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
-    </div>
-  )
-
-  const canStart = selected.length >= MIN_PICK
-
-  return (
-    <div style={s.wrap}>
-      <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
-        <span style={s.counter}>{selected.length} נבחרו</span>
-      </div>
-
-      <div style={s.pickerHead}>
-        <h2 style={s.pageTitle}>בחר מילים</h2>
-        <button style={s.randomBtn} onClick={pickRandom}>✦ בחר אקראי</button>
-      </div>
-
-      <div style={s.chips}>
-        {words.map(w => {
-          const on = !!selected.find(p => p.id === w.id)
-          return (
-            <button
-              key={w.id}
-              style={{ ...s.pickChip, ...(on ? s.pickChipOn : {}) }}
-              onClick={() => toggle(w)}
-            >
-              <span>{w.word}</span>
-              {w.translation && <span style={s.pickTranslation}>{w.translation}</span>}
-            </button>
-          )
-        })}
-      </div>
-
-      {selected.length > 0 && selected.length < MIN_PICK && (
-        <p style={{ color: c.ink3, fontSize: 12, textAlign: 'center', marginTop: 12 }}>
-          בחר עוד {MIN_PICK - selected.length} לפחות
-        </p>
-      )}
-
-      <button
-        style={{ ...s.primaryBtn, marginTop: 16, opacity: canStart ? 1 : 0.45 }}
-        onClick={() => canStart && onStart(selected)}
-        disabled={!canStart}
-      >
-        התחל תרגול ({selected.length})
-      </button>
-    </div>
-  )
-}
-
-/* ─── Level picker ───────────────────────────────────────────────── */
-const LEVEL_META = {
-  A1: { label: 'מתחיל',       bg: '#4080f0' },
-  A2: { label: 'בסיסי',       bg: '#2ec4a0' },
-  B1: { label: 'בינוני',      bg: '#e8a020' },
-  B2: { label: 'עצמאי',       bg: '#e07040' },
-  C1: { label: 'מתקדם',       bg: '#e05070' },
-  C2: { label: 'שליטה מלאה',  bg: '#7c3aed' },
-}
-
-function LevelView({ user, onBack, onStart }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-
-  async function pickLevel(level) {
-    setLoading(true); setError('')
-    const { data } = await supabase
-      .from('user_words')
-      .select('id, word, translation, level, correct_streak, wrong_count')
-      .eq('user_id', user.id)
-      .eq('level', level)
-      .not('translation', 'is', null)
-    setLoading(false)
-    const words = data ?? []
-    if (words.length < MIN_PICK) {
-      setError(`רק ${words.length} מילים ברמה ${level} — צריך לפחות ${MIN_PICK}`)
-      return
-    }
-    onStart(words)
-  }
-
-  if (loading) return <Spinner label="טוען מילים..." />
-
-  return (
-    <div style={s.wrap}>
-      <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
-      </div>
-      <div style={s.pageHeader}>
-        <h2 style={s.pageTitle}>בחר רמה</h2>
-        <p style={s.pageSub}>תרגל מילים לפי רמת CEFR</p>
-      </div>
-      <div style={s.levelGrid}>
-        {Object.entries(LEVEL_META).map(([level, { label, bg }]) => (
-          <button
-            key={level}
-            style={{ ...s.levelBtn, background: bg }}
-            onClick={() => pickLevel(level)}
-          >
-            <span style={s.levelCode}>{level}</span>
-            <span style={s.levelLabel}>{label}</span>
-          </button>
-        ))}
-      </div>
-      {error && <p style={{ color: c.rose, fontSize: 13, textAlign: 'center', marginTop: 16 }}>{error}</p>}
-    </div>
-  )
-}
-
-/* ─── Type words ─────────────────────────────────────────────────── */
-const VALID_LEVELS = new Set(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
-
-function TypeView({ user, onBack, onStart }) {
-  const [input, setInput]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const [status, setStatus]   = useState('')
-  const [failed, setFailed]   = useState([])
-  const [error, setError]     = useState('')
-
-  async function handleStart() {
-    const typed = [...new Set(
-      input.split(/[\n,]+/).map(w => w.trim().toLowerCase()).filter(Boolean)
-    )]
-    if (!typed.length) return
-    setLoading(true); setFailed([]); setError(''); setStatus('מחפש מילים...')
-
-    // 1. Find words already in bank (with translation)
-    const { data: existing } = await supabase
-      .from('user_words')
-      .select('id, word, translation, level, wrong_count')
-      .eq('user_id', user.id)
-      .in('word', typed)
-      .not('translation', 'is', null)
-
-    const existingSet = new Set((existing ?? []).map(w => w.word))
-    const newWords    = typed.filter(w => !existingSet.has(w))
-    let allWords      = [...(existing ?? [])]
-
-    // 2. Enrich + save any words not yet in bank
-    if (newWords.length > 0) {
-      setStatus(`מתרגם ${newWords.length} מילים חדשות...`)
-      const { data: enriched, error: fnErr } = await supabase.functions.invoke('enrich-words', {
-        body: { words: newWords }
-      })
-
-      if (!fnErr && Array.isArray(enriched) && enriched.length) {
-        const rows = enriched
-          .filter(e => e.word && e.translation)
-          .map(e => ({
-            user_id: user.id,
-            word: e.word.toLowerCase(),
-            translation: e.translation,
-            level: VALID_LEVELS.has(e.level) ? e.level : null,
-            source: 'manual',
-            correct_streak: 0,
-            wrong_count: 0,
-            story_count: 0,
-          }))
-
-        if (rows.length) {
-          const { data: upserted } = await supabase
-            .from('user_words')
-            .upsert(rows, { onConflict: 'user_id,word' })
-            .select('id, word, translation, level, wrong_count')
-          if (upserted?.length) allWords = [...allWords, ...upserted]
-        }
-
-        const enrichedSet = new Set(enriched.map(e => e.word?.toLowerCase()).filter(Boolean))
-        setFailed(newWords.filter(w => !enrichedSet.has(w)))
-      } else {
-        setFailed(newWords)
-      }
-    }
-
-    setLoading(false); setStatus('')
-
-    if (allWords.length < MIN_PICK) {
-      setError(`נמצאו רק ${allWords.length} מילים — צריך לפחות ${MIN_PICK}`)
-      return
-    }
-    onStart(allWords)
-  }
-
-  return (
-    <div style={s.wrap}>
-      <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
-      </div>
-      <div style={s.pageHeader}>
-        <h2 style={s.pageTitle}>הזן מילים</h2>
-        <p style={s.pageSub}>הקלד כל מילה באנגלית — גם מילים חדשות יתווספו למאגר שלך</p>
-      </div>
-      <textarea
-        style={s.typeArea}
-        placeholder="apple, universe, eloquent, run..."
-        value={input}
-        onChange={e => { setInput(e.target.value); setFailed([]); setError('') }}
-        dir="ltr"
-        rows={6}
-      />
-      {failed.length > 0 && (
-        <p style={{ color: c.ink3, fontSize: 12, marginTop: 8, direction: 'ltr', textAlign: 'left' }}>
-          לא זוהו: {failed.join(', ')}
-        </p>
-      )}
-      {error && <p style={{ color: c.rose, fontSize: 13, marginTop: 8 }}>{error}</p>}
-      <button
-        style={{ ...s.primaryBtn, marginTop: 16, opacity: input.trim() && !loading ? 1 : 0.45 }}
-        onClick={handleStart}
-        disabled={!input.trim() || loading}
-      >
-        {loading ? (status || 'טוען...') : 'התחל תרגול'}
-      </button>
     </div>
   )
 }
@@ -1332,18 +932,6 @@ const s = {
   },
   stepVal: { fontSize: 16, fontWeight: 600, color: c.ink, minWidth: 28, textAlign: 'center' },
 
-  /* quick random row (SourceView) */
-  quickRow: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    gap: 10, marginBottom: 14, background: c.mintL,
-    border: `1px solid ${c.mint}`, borderRadius: 12, padding: '10px 14px',
-  },
-  quickRandBtn: {
-    background: c.mint, border: 'none', borderRadius: 8,
-    color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500,
-    padding: '8px 14px', fontFamily: 'inherit', whiteSpace: 'nowrap',
-  },
-
   /* session history */
   historySection: {
     marginTop: 28, paddingTop: 20,
@@ -1386,45 +974,7 @@ const s = {
     color: 'rgba(255,255,255,0.3)', fontSize: 18,
   },
 
-  /* source cards */
-  sourceCard: {
-    width: '100%', display: 'flex', alignItems: 'center', gap: 14,
-    background: c.white, border: `1.5px solid ${c.border}`,
-    borderRadius: 14, padding: '16px', marginBottom: 10,
-    cursor: 'pointer', textAlign: 'right', fontFamily: 'inherit',
-  },
-  sourceCardDisabled: { opacity: 0.45, cursor: 'not-allowed' },
-  sourceIcon:  { fontSize: 22, flexShrink: 0 },
-  sourceTitle: { fontSize: 14, fontWeight: 600, color: c.ink, marginBottom: 2 },
-  sourceSub:   { fontSize: 12, color: c.ink3 },
-
-  /* level picker */
-  levelGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 8 },
-  levelBtn: {
-    borderRadius: 14, padding: '22px 16px', border: 'none',
-    cursor: 'pointer', display: 'flex', flexDirection: 'column',
-    alignItems: 'center', gap: 6, fontFamily: 'inherit',
-  },
-  levelCode:  { fontSize: 30, fontWeight: 700, color: '#fff' },
-  levelLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
-
-  /* type words */
-  typeArea: {
-    width: '100%', boxSizing: 'border-box',
-    background: '#f0ede6', border: '1.5px solid rgba(0,0,0,0.08)',
-    borderRadius: 10, padding: 14, color: '#1a1a2e',
-    fontSize: 14, lineHeight: 1.7, resize: 'vertical',
-    outline: 'none', fontFamily: 'inherit',
-  },
-
-  /* word picker */
-  pickerHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  randomBtn: {
-    background: c.skyL, border: `1px solid ${c.sky}`,
-    borderRadius: 8, color: c.sky,
-    cursor: 'pointer', fontSize: 12, fontWeight: 500,
-    padding: '6px 12px', fontFamily: 'inherit',
-  },
+  /* sentence match chips */
   chips: { display: 'flex', flexWrap: 'wrap', gap: 8 },
   pickChip: {
     display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
@@ -1434,7 +984,6 @@ const s = {
     transition: 'all 0.15s',
   },
   pickChipOn: { background: c.mintL, borderColor: c.mint, color: c.mintD },
-  pickTranslation: { fontSize: 10, color: c.ink3, marginTop: 2 },
 
   /* quiz */
   track: { height: 5, background: c.surface, borderRadius: 3, marginBottom: 24, overflow: 'hidden' },
