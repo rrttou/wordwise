@@ -31,19 +31,19 @@ function shuffle(arr) {
 export default function PracticeScreen({ user }) {
   const { currentWords, setCurrentWords, wordCount, setWordCount, pastSessions, loadSessions, saveSession } = useSession()
 
-  const [view, setView]          = useState('hub')
-  const [dir, setDir]            = useState('en-he')
-  const [exType, setExType]      = useState('quiz')
-  const [source, setSource]      = useState('own')
-  const [customWords, setCustom] = useState([])
-  const [result, setResult]      = useState(null)
+  const [view, setView]                   = useState('hub')
+  const [dir, setDir]                     = useState('en-he')
+  const [exType, setExType]               = useState('quiz')
+  const [source, setSource]               = useState('own')
+  const [customWords, setCustom]          = useState([])
+  const [result, setResult]               = useState(null)
+  const [sessionPicker, setSessionPicker] = useState(null) // session whose mode picker is open
 
   useEffect(() => { loadSessions() }, [loadSessions])
 
   const goHub = () => setView('hub')
   const dest  = exType
 
-  // Saves words as new session + starts exercise
   function startWithWords(words) {
     saveSession(words)
     setCustom(words)
@@ -51,7 +51,6 @@ export default function PracticeScreen({ user }) {
     setView(dest)
   }
 
-  // Uses currentWords from context directly (no new session saved)
   function startWithCurrent(exerciseType, direction) {
     setCustom(currentWords)
     setSource('custom')
@@ -59,73 +58,52 @@ export default function PracticeScreen({ user }) {
     else { setExType(exerciseType); setView(exerciseType) }
   }
 
+  // Called when user picks a mode from the session mode picker
+  function startSessionExercise(session, type, direction) {
+    setSessionPicker(null)
+    const words = session.words
+    setCurrentWords(words)
+    setCustom(words)
+    setSource('custom')
+    if (type === 'quiz') { setExType('quiz'); setDir(direction ?? 'en-he'); setView('quiz') }
+    else if (type === 'story') { setExType('story'); setView('story') }
+    else { setExType(type); setView(type) }
+  }
+
   if (view === 'word-picker') return (
     <WordPicker user={user} onDone={startWithWords} onCancel={goHub} />
   )
-
-  if (view === 'story') return <StoryScreen user={user} onBack={goHub} initialWords={customWords} />
-
-  if (view === 'quiz') return (
-    <QuizView
-      user={user} direction={dir} source={source} customWords={customWords}
-      onBack={goHub}
-      onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
-    />
-  )
-
-  if (view === 'write') return (
-    <SentenceWriteView
-      user={user} source={source} customWords={customWords}
-      onBack={goHub}
-      onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
-    />
-  )
-
-  if (view === 'match') return (
-    <SentenceMatchView
-      user={user} source={source} customWords={customWords}
-      onBack={goHub}
-      onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
-    />
-  )
-
-  if (view === 'grammar') return (
-    <GrammarQuizView
-      user={user} source={source} customWords={customWords}
-      onBack={goHub}
-      onFinish={(score, total) => { setResult({ score, total }); setView('results') }}
-    />
-  )
-
-  if (view === 'memory') return (
-    <MemoryGame
-      user={user} source={source} customWords={customWords}
-      onBack={goHub}
-    />
-  )
-
-  if (view === 'results') return (
-    <ResultsView
-      score={result.score} total={result.total}
-      onRepeat={() => setView(dest)}
-      onHub={goHub}
-    />
-  )
+  if (view === 'story')   return <StoryScreen user={user} onBack={goHub} initialWords={customWords} />
+  if (view === 'quiz')    return <QuizView user={user} direction={dir} source={source} customWords={customWords} onBack={goHub} onFinish={(score, total) => { setResult({ score, total }); setView('results') }} />
+  if (view === 'write')   return <SentenceWriteView user={user} source={source} customWords={customWords} onBack={goHub} onFinish={(score, total) => { setResult({ score, total }); setView('results') }} />
+  if (view === 'match')   return <SentenceMatchView user={user} source={source} customWords={customWords} onBack={goHub} onFinish={(score, total) => { setResult({ score, total }); setView('results') }} />
+  if (view === 'grammar') return <GrammarQuizView user={user} source={source} customWords={customWords} onBack={goHub} onFinish={(score, total) => { setResult({ score, total }); setView('results') }} />
+  if (view === 'memory')  return <MemoryGame user={user} source={source} customWords={customWords} onBack={goHub} />
+  if (view === 'results') return <ResultsView score={result.score} total={result.total} onRepeat={() => setView(dest)} onHub={goHub} />
 
   return (
-    <HubView
-      currentWords={currentWords}
-      wordCount={wordCount}
-      setWordCount={setWordCount}
-      pastSessions={pastSessions}
-      onLoadSession={s => setCurrentWords(s.words)}
-      onStartWithCurrent={startWithCurrent}
-      onPickWords={(type, param) => {
-        setExType(type)
-        if (type === 'quiz') setDir(param ?? 'en-he')
-        setView('word-picker')
-      }}
-    />
+    <>
+      <HubView
+        currentWords={currentWords}
+        wordCount={wordCount}
+        setWordCount={setWordCount}
+        pastSessions={pastSessions}
+        onStartWithCurrent={startWithCurrent}
+        onPickWords={(type, param) => {
+          setExType(type)
+          if (type === 'quiz') setDir(param ?? 'en-he')
+          setView('word-picker')
+        }}
+        onPracticeSession={session => setSessionPicker(session)}
+      />
+      {sessionPicker && (
+        <SessionModePicker
+          session={sessionPicker}
+          onClose={() => setSessionPicker(null)}
+          onStart={(type, dir) => startSessionExercise(sessionPicker, type, dir)}
+        />
+      )}
+    </>
   )
 }
 
@@ -138,11 +116,11 @@ function monthLabel(iso) {
 
 /* ─── Hub ────────────────────────────────────────────────────────── */
 function HubView({
-  onPickWords, onStartWithCurrent,
-  currentWords, wordCount, setWordCount,
-  pastSessions, onLoadSession,
+  onPickWords, onStartWithCurrent, onPracticeSession,
+  currentWords, wordCount, setWordCount, pastSessions,
 }) {
   const hasCurrent = currentWords.length > 0
+  const [expandedId, setExpandedId] = useState(null)
 
   const grouped = pastSessions.reduce((acc, s) => {
     const key = monthLabel(s.created_at)
@@ -151,6 +129,12 @@ function HubView({
     return acc
   }, {})
   const monthKeys = Object.keys(grouped)
+  const [activeMonth, setActiveMonth] = useState(() => monthKeys[0] ?? null)
+
+  // Keep activeMonth valid when sessions load
+  useEffect(() => {
+    if (!activeMonth && monthKeys.length) setActiveMonth(monthKeys[0])
+  }, [monthKeys.length])
 
   function modeClick(type, param) {
     if (hasCurrent) onStartWithCurrent(type, param)
@@ -195,22 +179,14 @@ function HubView({
 
       {/* Mode cards */}
       <button style={{ ...s.modeCard, background: c.ink }} onClick={() => modeClick('quiz', 'en-he')}>
-        <div style={s.modeLangs}>
-          <span style={{ color: c.mint, fontWeight: 700 }}>EN</span>
-          <span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span>
-          <span style={{ color: 'rgba(255,255,255,0.6)' }}>עב</span>
-        </div>
+        <div style={s.modeLangs}><span style={{ color: c.mint, fontWeight: 700 }}>EN</span><span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span><span style={{ color: 'rgba(255,255,255,0.6)' }}>עב</span></div>
         <div style={s.modeTitle}>אנגלית → עברית</div>
         <div style={s.modeSub}>{hasCurrent ? 'תרגל את הקבוצה הפעילה' : 'ראה מילה באנגלית, בחר תרגום'}</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
       <button style={{ ...s.modeCard, background: c.sky }} onClick={() => modeClick('quiz', 'he-en')}>
-        <div style={s.modeLangs}>
-          <span style={{ color: '#fff', fontWeight: 700 }}>עב</span>
-          <span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span>
-          <span style={{ color: 'rgba(255,255,255,0.7)' }}>EN</span>
-        </div>
+        <div style={s.modeLangs}><span style={{ color: '#fff', fontWeight: 700 }}>עב</span><span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span><span style={{ color: 'rgba(255,255,255,0.7)' }}>EN</span></div>
         <div style={s.modeTitle}>עברית → אנגלית</div>
         <div style={s.modeSub}>{hasCurrent ? 'תרגל את הקבוצה הפעילה' : 'ראה תרגום, בחר מילה באנגלית'}</div>
         <span style={s.modeChevron}>←</span>
@@ -218,73 +194,177 @@ function HubView({
 
       <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.gold},#c87800)` }} onClick={() => modeClick('story')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>✦</span></div>
-        <div style={s.modeTitle}>סיפורים</div>
-        <div style={s.modeSub}>צור סיפור AI עם המילים שלך</div>
+        <div style={s.modeTitle}>סיפורים</div><div style={s.modeSub}>צור סיפור AI עם המילים שלך</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
       <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.mint},#1a9e80)` }} onClick={() => modeClick('write')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>✍</span></div>
-        <div style={s.modeTitle}>כתיבת משפטים</div>
-        <div style={s.modeSub}>כתוב משפטים עם המילים, AI יתקן</div>
+        <div style={s.modeTitle}>כתיבת משפטים</div><div style={s.modeSub}>כתוב משפטים עם המילים, AI יתקן</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
       <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.rose},#a03050)` }} onClick={() => modeClick('match')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>🔗</span></div>
-        <div style={s.modeTitle}>התאמת משפטים</div>
-        <div style={s.modeSub}>התאם בין משפטים למילים</div>
+        <div style={s.modeTitle}>התאמת משפטים</div><div style={s.modeSub}>התאם בין משפטים למילים</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
       <button style={{ ...s.modeCard, background: 'linear-gradient(135deg,#7c3aed,#5b21b6)' }} onClick={() => modeClick('grammar')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>📝</span></div>
-        <div style={s.modeTitle}>מבחן דקדוק</div>
-        <div style={s.modeSub}>שאלות על זמנים דקדוקיים באנגלית</div>
+        <div style={s.modeTitle}>מבחן דקדוק</div><div style={s.modeSub}>שאלות על זמנים דקדוקיים באנגלית</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
       <button style={{ ...s.modeCard, background: 'linear-gradient(135deg,#f59e0b,#d97706)' }} onClick={() => modeClick('memory')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>🎴</span></div>
-        <div style={s.modeTitle}>משחק זיכרון</div>
-        <div style={s.modeSub}>{hasCurrent ? `${currentWords.length} זוגות — הפוך וגלה` : 'מצא זוגות: אנגלית + עברית'}</div>
+        <div style={s.modeTitle}>משחק זיכרון</div><div style={s.modeSub}>{hasCurrent ? `${currentWords.length} זוגות — הפוך וגלה` : 'מצא זוגות: אנגלית + עברית'}</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
-      {/* Past sessions — always visible */}
+      {/* ── History ── */}
       <div style={s.historySection}>
         <div style={s.historyTitle}>מילים שתרגלת</div>
+
         {monthKeys.length === 0 ? (
           <p style={{ color: c.ink3, fontSize: 12, textAlign: 'center', padding: '14px 0 4px' }}>
             לאחר שתתרגל יופיעו כאן קבוצות המילים שלך
           </p>
-        ) : monthKeys.map(month => (
-          <div key={month} style={{ marginBottom: 16 }}>
-            <div style={s.monthLabel}>{month}</div>
-            <div style={s.sessionRow}>
-              {grouped[month].map(session => (
+        ) : (
+          <>
+            {/* Month navbar */}
+            <div style={s.monthNav}>
+              {monthKeys.map(month => (
                 <button
-                  key={session.id}
-                  style={s.sessionCard}
-                  onClick={() => onLoadSession(session)}
+                  key={month}
+                  style={{ ...s.monthBtn, ...(activeMonth === month ? s.monthBtnOn : {}) }}
+                  onClick={() => { setActiveMonth(month); setExpandedId(null) }}
                 >
-                  <div style={s.sessionWords}>
-                    {session.words.slice(0, 3).map(w => (
-                      <span key={w.word ?? w} style={s.sessionWordChip}>{w.word ?? w}</span>
-                    ))}
-                    {session.words.length > 3 && (
-                      <span style={s.sessionMore}>+{session.words.length - 3}</span>
-                    )}
-                  </div>
-                  <div style={s.sessionCount}>{session.words.length} מילים</div>
+                  {month}
                 </button>
               ))}
             </div>
-          </div>
-        ))}
+
+            {/* Sessions for active month */}
+            <div style={s.sessionList}>
+              {(grouped[activeMonth] ?? []).map(session => {
+                const firstWord  = session.words[0]?.word ?? session.words[0] ?? '—'
+                const isExpanded = expandedId === session.id
+                return (
+                  <div key={session.id} style={s.sessionItem}>
+                    {/* Header row */}
+                    <div
+                      style={s.sessionItemHeader}
+                      onClick={() => setExpandedId(isExpanded ? null : session.id)}
+                    >
+                      <div style={s.sessionItemLeft}>
+                        <span style={s.sessionFirstWord}>{firstWord}</span>
+                        <span style={s.sessionItemCount}>{session.words.length} מילים</span>
+                      </div>
+                      <div style={s.sessionItemRight}>
+                        <button
+                          style={s.practiceBtn}
+                          onClick={e => { e.stopPropagation(); onPracticeSession(session) }}
+                        >
+                          תרגל ←
+                        </button>
+                        <span style={s.expandIcon}>{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+
+                    {/* Expanded: all words */}
+                    {isExpanded && (
+                      <div style={s.sessionItemBody}>
+                        {session.words.map(w => (
+                          <span key={w.word ?? w} style={s.sessionBodyChip}>
+                            {w.word ?? w}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
+}
+
+/* ─── Session mode picker (bottom sheet) ─────────────────────────── */
+const MODES = [
+  { type: 'quiz',    dir: 'en-he', label: 'EN → עב',       bg: c.ink              },
+  { type: 'quiz',    dir: 'he-en', label: 'עב → EN',       bg: c.sky              },
+  { type: 'story',   dir: null,    label: 'סיפורים ✦',     bg: `linear-gradient(135deg,${c.gold},#c87800)` },
+  { type: 'write',   dir: null,    label: 'כתיבת משפטים ✍', bg: `linear-gradient(135deg,${c.mint},#1a9e80)` },
+  { type: 'match',   dir: null,    label: 'התאמת משפטים 🔗', bg: `linear-gradient(135deg,${c.rose},#a03050)` },
+  { type: 'grammar', dir: null,    label: 'דקדוק 📝',       bg: 'linear-gradient(135deg,#7c3aed,#5b21b6)'  },
+  { type: 'memory',  dir: null,    label: 'משחק זיכרון 🎴', bg: 'linear-gradient(135deg,#f59e0b,#d97706)'  },
+]
+
+function SessionModePicker({ session, onClose, onStart }) {
+  const firstWord = session.words[0]?.word ?? session.words[0] ?? '—'
+  return (
+    <div style={sp.overlay} onClick={onClose}>
+      <div style={sp.sheet} onClick={e => e.stopPropagation()}>
+        <div style={sp.handle} />
+        <div style={sp.sheetHeader}>
+          <div>
+            <div style={sp.sheetTitle}>{firstWord}</div>
+            <div style={sp.sheetSub}>{session.words.length} מילים · בחר מצב תרגול</div>
+          </div>
+          <button style={sp.closeBtn} onClick={onClose}>✕</button>
+        </div>
+        <div style={sp.modeGrid}>
+          {MODES.map(m => (
+            <button
+              key={m.type + m.dir}
+              style={{ ...sp.modeBtn, background: m.bg }}
+              onClick={() => onStart(m.type, m.dir)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const sp = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+    zIndex: 200, display: 'flex', alignItems: 'flex-end',
+  },
+  sheet: {
+    background: c.white, borderRadius: '18px 18px 0 0',
+    padding: '8px 16px 32px', width: '100%', maxWidth: 420, margin: '0 auto',
+    direction: 'rtl',
+  },
+  handle: {
+    width: 36, height: 4, borderRadius: 2, background: c.border,
+    margin: '8px auto 16px', flexShrink: 0,
+  },
+  sheetHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: 600, color: c.ink, fontFamily: "'Playfair Display', serif" },
+  sheetSub:   { fontSize: 12, color: c.ink3, marginTop: 2 },
+  closeBtn: {
+    background: 'transparent', border: 'none', fontSize: 18,
+    color: c.ink3, cursor: 'pointer', padding: 0, lineHeight: 1,
+  },
+  modeGrid: {
+    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+  },
+  modeBtn: {
+    border: 'none', borderRadius: 12, padding: '13px 10px',
+    color: '#fff', fontSize: 13, fontWeight: 600,
+    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center',
+  },
 }
 
 /* ─── Quiz ───────────────────────────────────────────────────────── */
@@ -948,29 +1028,52 @@ const s = {
   },
   historyTitle: {
     fontSize: 11, fontWeight: 600, letterSpacing: '1.2px',
-    textTransform: 'uppercase', color: c.ink3, marginBottom: 14,
+    textTransform: 'uppercase', color: c.ink3, marginBottom: 12,
   },
-  monthLabel: {
-    fontSize: 12, fontWeight: 600, color: c.ink2,
-    marginBottom: 8, direction: 'rtl',
+
+  /* month navbar */
+  monthNav: {
+    display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none',
+    marginBottom: 12, paddingBottom: 2,
   },
-  sessionRow: {
-    display: 'flex', gap: 8, overflowX: 'auto',
-    paddingBottom: 4, scrollbarWidth: 'none',
+  monthBtn: {
+    background: c.white, border: `1.5px solid ${c.border}`, borderRadius: 20,
+    padding: '5px 14px', fontSize: 12, fontWeight: 500, color: c.ink3,
+    cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap',
   },
-  sessionCard: {
+  monthBtnOn: { background: c.mintL, borderColor: c.mint, color: c.mintD, fontWeight: 600 },
+
+  /* session accordion list */
+  sessionList: { display: 'flex', flexDirection: 'column', gap: 6 },
+  sessionItem: {
     background: c.white, border: `1px solid ${c.border}`,
-    borderRadius: 12, padding: '10px 12px',
-    cursor: 'pointer', fontFamily: 'inherit',
-    textAlign: 'right', flexShrink: 0, minWidth: 120, maxWidth: 160,
+    borderRadius: 12, overflow: 'hidden',
   },
-  sessionWords: { display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 6, direction: 'ltr' },
-  sessionWordChip: {
-    background: c.surface, borderRadius: 5,
-    padding: '2px 6px', fontSize: 11, fontWeight: 600, color: c.ink,
+  sessionItemHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '12px 14px', cursor: 'pointer',
   },
-  sessionMore: { fontSize: 11, color: c.ink3, alignSelf: 'center' },
-  sessionCount: { fontSize: 11, color: c.ink3 },
+  sessionItemLeft: { display: 'flex', flexDirection: 'column', gap: 2 },
+  sessionFirstWord: { fontSize: 14, fontWeight: 600, color: c.ink, direction: 'ltr' },
+  sessionItemCount: { fontSize: 11, color: c.ink3 },
+  sessionItemRight: { display: 'flex', alignItems: 'center', gap: 10 },
+  practiceBtn: {
+    background: c.mint, border: 'none', borderRadius: 8,
+    color: '#fff', fontSize: 12, fontWeight: 600,
+    padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  },
+  expandIcon: { fontSize: 10, color: c.ink3 },
+  sessionItemBody: {
+    display: 'flex', flexWrap: 'wrap', gap: 5,
+    padding: '0 14px 12px', borderTop: `1px solid ${c.border}`,
+    paddingTop: 10,
+  },
+  sessionBodyChip: {
+    background: c.surface, borderRadius: 6,
+    padding: '3px 8px', fontSize: 12, fontWeight: 500, color: c.ink,
+    direction: 'ltr',
+  },
 
   /* hub mode cards */
   modeCard: {
