@@ -68,19 +68,32 @@ export default function WordPicker({ user, onDone, onCancel }) {
     if (dataSource === 'manual') { setAllWords([]); return }
     async function load() {
       setLoading(true)
-      const q = dataSource === 'global'
-        ? supabase.from('global_words')
+      let words = []
+      if (dataSource === 'global') {
+        const PAGE = 1000
+        let from = 0
+        while (true) {
+          const { data } = await supabase
+            .from('global_words')
             .select('word, translation, level')
             .not('translation', 'is', null)
             .order('word')
-            .limit(10000)
-        : supabase.from('user_words')
-            .select('id, word, translation, level, wrong_count')
-            .eq('user_id', user.id)
-            .not('translation', 'is', null)
-            .order('word')
-      const { data } = await q
-      setAllWords(data ?? [])
+            .range(from, from + PAGE - 1)
+          if (!data?.length) break
+          words = [...words, ...data]
+          if (data.length < PAGE) break
+          from += PAGE
+        }
+      } else {
+        const { data } = await supabase
+          .from('user_words')
+          .select('id, word, translation, level, wrong_count')
+          .eq('user_id', user.id)
+          .not('translation', 'is', null)
+          .order('word')
+        words = data ?? []
+      }
+      setAllWords(words)
       setLoading(false)
     }
     load()

@@ -32,13 +32,21 @@ export default function GlobalWordBank() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const { data } = await supabase
-        .from('global_words')
-        .select('word, translation, level')
-        .not('translation', 'is', null)
-        .order('word')
-        .limit(10000)
-      setAllWords(data ?? [])
+      const PAGE = 1000
+      let all = [], from = 0
+      while (true) {
+        const { data } = await supabase
+          .from('global_words')
+          .select('word, translation, level')
+          .not('translation', 'is', null)
+          .order('word')
+          .range(from, from + PAGE - 1)
+        if (!data?.length) break
+        all = [...all, ...data]
+        if (data.length < PAGE) break
+        from += PAGE
+      }
+      setAllWords(all)
       setLoading(false)
     }
     load()
