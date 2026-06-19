@@ -129,12 +129,7 @@ function HubView({
     return acc
   }, {})
   const monthKeys = Object.keys(grouped)
-  const [activeMonth, setActiveMonth] = useState(() => monthKeys[0] ?? null)
-
-  // Keep activeMonth valid when sessions load
-  useEffect(() => {
-    if (!activeMonth && monthKeys.length) setActiveMonth(monthKeys[0])
-  }, [monthKeys.length])
+  const [activeMonth, setActiveMonth] = useState(null)
 
   function modeClick(type, param) {
     if (hasCurrent) onStartWithCurrent(type, param)
