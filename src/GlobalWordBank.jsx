@@ -37,7 +37,7 @@ export default function GlobalWordBank() {
         .select('word, translation, level')
         .not('translation', 'is', null)
         .order('word')
-        .limit(3000)
+        .limit(10000)
       setAllWords(data ?? [])
       setLoading(false)
     }

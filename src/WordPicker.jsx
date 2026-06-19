@@ -73,7 +73,7 @@ export default function WordPicker({ user, onDone, onCancel }) {
             .select('word, translation, level')
             .not('translation', 'is', null)
             .order('word')
-            .limit(3000)
+            .limit(10000)
         : supabase.from('user_words')
             .select('id, word, translation, level, wrong_count')
             .eq('user_id', user.id)
