@@ -4,6 +4,8 @@ import UploadWords from './UploadWords'
 import StoryScreen from './StoryScreen'
 import PlacementTestScreen from './PlacementTest'
 import PracticeScreen from './PracticeScreen'
+import GlobalWordBank from './GlobalWordBank'
+import { SessionProvider } from './SessionContext'
 
 /* ─── Tokens ─────────────────────────────────────────────────────── */
 const c = {
@@ -23,6 +25,31 @@ const MOD_COLORS = [
   { bg: c.goldL, bar: c.gold },
 ]
 
+/* ─── Streak helper ──────────────────────────────────────────────── */
+async function updateStreak(userId) {
+  // Use Israel time (UTC+3) for day boundaries
+  const israelNow  = new Date(Date.now() + 3 * 3600 * 1000)
+  const today      = israelNow.toISOString().split('T')[0]
+  const yesterday  = new Date(Date.now() + 3 * 3600 * 1000 - 86400000).toISOString().split('T')[0]
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('last_seen_date, streak')
+    .eq('id', userId)
+    .single()
+
+  const lastSeen = profile?.last_seen_date
+  const cur      = profile?.streak ?? 0
+
+  if (lastSeen === today) return cur  // already counted today
+
+  const newStreak = lastSeen === yesterday ? cur + 1 : 1
+  await supabase.from('profiles')
+    .update({ last_seen_date: today, streak: newStreak })
+    .eq('id', userId)
+  return newStreak
+}
+
 /* ─── Root ───────────────────────────────────────────────────────── */
 export default function App() {
   if (supabaseMissingConfig) throw new Error('חסרות משתני סביבה: VITE_SUPABASE_URL ו-VITE_SUPABASE_ANON_KEY')
@@ -30,6 +57,7 @@ export default function App() {
   const [screen,      setScreen]      = useState('landing')
   const [tab,         setTab]         = useState('dashboard')
   const [user,        setUser]        = useState(null)
+  const [streak,      setStreak]      = useState(0)
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
@@ -69,11 +97,11 @@ export default function App() {
 
   async function enterApp(u) {
     setUser(u)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_tested')
-      .eq('id', u.id)
-      .single()
+    const [{ data: profile }, newStreak] = await Promise.all([
+      supabase.from('profiles').select('is_tested').eq('id', u.id).single(),
+      updateStreak(u.id),
+    ])
+    setStreak(newStreak)
     if (profile?.is_tested === false) setScreen('placement-test')
     else { setTab('dashboard'); setScreen('app') }
   }
@@ -98,39 +126,41 @@ export default function App() {
   const isApp = screen === 'app'
 
   return (
-    <div style={{ background: c.cream, minHeight: '100vh' }}>
-      <TopBar
-        user={user} screen={screen}
-        onHome={goHome}
-        onLogin={() => setScreen('auth')}
-        onBack={() => setScreen(user ? 'app' : 'landing')}
-        onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
-      />
+    <SessionProvider user={user}>
+      <div style={{ background: c.cream, minHeight: '100vh' }}>
+        <TopBar
+          user={user} screen={screen} streak={streak}
+          onHome={goHome}
+          onLogin={() => setScreen('auth')}
+          onBack={() => setScreen(user ? 'app' : 'landing')}
+          onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
+        />
 
-      <main style={{ paddingTop: 60, paddingBottom: isApp ? 86 : 0 }}>
-        {screen === 'landing'          && <LandingScreen onStart={() => setScreen('auth')} />}
-        {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
-        {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
-        {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
-        {isApp && tab === 'dashboard' && <DashboardScreen user={user} onUpload={() => setTab('upload')} />}
-        {isApp && tab === 'upload'    && <UploadWords user={user} />}
-        {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
-        {isApp && tab === 'progress'  && <ComingSoon icon="📊" label="התקדמות" />}
-        {isApp && tab === 'profile'   && (
-          <ProfileScreen
-            user={user}
-            onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
-          />
-        )}
-      </main>
+        <main style={{ paddingTop: 60, paddingBottom: isApp ? 86 : 0 }}>
+          {screen === 'landing'          && <LandingScreen onStart={() => setScreen('auth')} />}
+          {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
+          {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
+          {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
+          {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} />}
+          {isApp && tab === 'upload'    && <UploadWords user={user} />}
+          {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
+          {isApp && tab === 'wordbank'  && <GlobalWordBank />}
+          {isApp && tab === 'profile'   && (
+            <ProfileScreen
+              user={user}
+              onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
+            />
+          )}
+        </main>
 
-      {isApp && <BottomNav tab={tab} setTab={setTab} />}
-    </div>
+        {isApp && <BottomNav tab={tab} setTab={setTab} />}
+      </div>
+    </SessionProvider>
   )
 }
 
 /* ─── Top bar ────────────────────────────────────────────────────── */
-function TopBar({ user, screen, onHome, onLogin, onBack, onLogout }) {
+function TopBar({ user, screen, streak, onHome, onLogin, onBack, onLogout }) {
   const isApp = screen === 'app'
 
   return (
@@ -143,7 +173,7 @@ function TopBar({ user, screen, onHome, onLogin, onBack, onLogout }) {
             </div>
             <div style={s.streakPill}>
               <span style={s.streakDot} />
-              12 ימים רצוף
+              {streak} {streak === 1 ? 'יום רצוף' : 'ימים רצוף'}
             </div>
           </>
         ) : screen === 'landing' ? (
@@ -172,7 +202,7 @@ function BottomNav({ tab, setTab }) {
     { id: 'dashboard', label: 'בית',     iconBg: c.ink },
     { id: 'upload',    label: 'מילים',   iconBg: c.sky },
     { id: 'practice',  label: 'תרגול',   iconBg: c.rose },
-    { id: 'progress',  label: 'התקדמות', iconBg: c.gold },
+    { id: 'wordbank',  label: 'מילון',    iconBg: c.gold },
     { id: 'profile',   label: 'פרופיל',  iconBg: c.surface, border: true },
   ]
   return (
@@ -359,21 +389,63 @@ function ResetPasswordScreen({ onSuccess }) {
 }
 
 /* ─── Dashboard ──────────────────────────────────────────────────── */
-function DashboardScreen({ user, onUpload }) {
+function DashboardScreen({ user, streak, onUpload }) {
+  const [dailyWord, setDailyWord] = useState(null)
+  const [stats,     setStats]     = useState({ total: 0, learned: 0, accuracy: null })
+
+  useEffect(() => {
+    fetchDailyWord()
+    fetchStats()
+  }, [])
+
+  async function fetchDailyWord() {
+    const { count } = await supabase
+      .from('global_words')
+      .select('*', { count: 'exact', head: true })
+      .not('translation', 'is', null)
+    if (!count) return
+    // Changes at 06:00 AM Israel time (UTC+3)
+    const dayIndex = Math.floor((Date.now() + 3 * 3600 * 1000) / (24 * 3600 * 1000))
+    const offset   = dayIndex % count
+    const { data } = await supabase
+      .from('global_words')
+      .select('word, translation, level')
+      .not('translation', 'is', null)
+      .order('id')
+      .range(offset, offset)
+    if (data?.[0]) setDailyWord(data[0])
+  }
+
+  async function fetchStats() {
+    const { data } = await supabase
+      .from('user_words')
+      .select('correct_streak, wrong_count')
+      .eq('user_id', user.id)
+      .not('translation', 'is', null)
+    if (!data) return
+    const total        = data.length
+    const learned      = data.filter(w => (w.correct_streak ?? 0) > 0).length
+    const totalCorrect = data.reduce((s, w) => s + (w.correct_streak ?? 0), 0)
+    const totalWrong   = data.reduce((s, w) => s + (w.wrong_count   ?? 0), 0)
+    const accuracy     = totalCorrect + totalWrong > 0
+      ? Math.round(totalCorrect / (totalCorrect + totalWrong) * 100)
+      : null
+    setStats({ total, learned, accuracy })
+  }
+
+  const vocabProg = stats.total > 0 ? Math.round(stats.learned / stats.total * 100) : 0
+
   return (
     <div style={s.wrap}>
 
       {/* Word of the day */}
       <div style={s.heroCard}>
         <div style={s.heroLabel}>מילת היום</div>
-        <div style={s.heroWord}>Ephemeral</div>
-        <div style={s.heroPhonetic}>/ɪˈfem.ər.əl/</div>
-        <div style={s.heroDef}>
-          Lasting for only a short time; transitory.{' '}
-          <span style={{ color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
-            "The ephemeral beauty of cherry blossoms"
-          </span>
-        </div>
+        <div style={s.heroWord}>{dailyWord?.word ?? '...'}</div>
+        {dailyWord?.level && (
+          <div style={s.heroPhonetic}>{dailyWord.level}</div>
+        )}
+        <div style={s.heroDef}>{dailyWord?.translation ?? ''}</div>
         <div style={s.heroActions}>
           <button style={s.btnPrimary}>תרגל עכשיו</button>
           <button style={s.btnGhost}>הוסף לרשימה</button>
@@ -383,18 +455,23 @@ function DashboardScreen({ user, onUpload }) {
       {/* Modules */}
       <div style={s.sectionTitle}>מודולי לימוד</div>
       <div style={s.modulesGrid}>
-        <ModuleCard i={0} icon="📖" name="אוצר מילים" sub="240 מילים"    prog={72} onClick={onUpload} />
-        <ModuleCard i={1} icon="✍️" name="דקדוק"      sub="18 שיעורים"  prog={45} />
-        <ModuleCard i={2} icon="🎧" name="האזנה"      sub="32 קטעים"    prog={88} />
-        <ModuleCard i={3} icon="💬" name="שיחה"        sub="15 תרחישים"  prog={30} />
+        <ModuleCard
+          i={0} icon="📖" name="אוצר מילים"
+          sub={stats.total > 0 ? `${stats.learned} / ${stats.total} מילים` : '0 מילים'}
+          prog={vocabProg}
+          onClick={onUpload}
+        />
+        <ModuleCard i={1} icon="✍️" name="דקדוק"  sub="בקרוב" prog={0} />
+        <ModuleCard i={2} icon="🎧" name="האזנה"  sub="בקרוב" prog={0} />
+        <ModuleCard i={3} icon="💬" name="שיחה"   sub="בקרוב" prog={0} />
       </div>
 
       {/* Stats */}
       <div style={s.sectionTitle}>הסטטיסטיקות שלך</div>
       <div style={s.statsRow}>
-        <StatCard val="347" lbl="מילים" />
-        <StatCard val="83%" lbl="דיוק"  />
-        <StatCard val="12h" lbl="שעות"  />
+        <StatCard val={stats.total}                                    lbl="מילים"     />
+        <StatCard val={stats.accuracy !== null ? `${stats.accuracy}%` : '—'} lbl="דיוק" />
+        <StatCard val={streak}                                         lbl="ימים רצוף" />
       </div>
 
     </div>

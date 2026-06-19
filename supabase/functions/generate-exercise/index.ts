@@ -39,8 +39,10 @@ IMPORTANT — question style:
 - Bad example (avoid): "She _____ (work) here since 2020." — do NOT use this format with base verb in parentheses.
 - Each sentence must naturally include one of the vocabulary words.
 
+REQUIRED: Every question object MUST include both "explanation_en" (English explanation of the grammar rule) and "explanation_he" (the same explanation translated to Hebrew). Both fields are mandatory for every question.
+
 Respond ONLY with a valid JSON array (no markdown):
-[{"question":"I have ___ feeling great all week.","options":["been","be","being","had been"],"correct":0,"tense":"Present Perfect Continuous","explanation":"משתמשים ב-Present Perfect Continuous לתהליך שהתחיל בעבר ונמשך עד עכשיו."}]
+[{"question":"I have ___ feeling great all week.","options":["been","be","being","had been"],"correct":0,"tense":"Present Perfect Continuous","explanation_en":"We use Present Perfect Continuous for an action that started in the past and is still continuing now.","explanation_he":"משתמשים ב-Present Perfect Continuous לתהליך שהתחיל בעבר ונמשך עד עכשיו."}]
 "correct" is 0-based index. Include ${count} questions covering varied tenses.`
     }
 

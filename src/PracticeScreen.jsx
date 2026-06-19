@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 import StoryScreen from './StoryScreen'
+import { useSession } from './SessionContext'
+import MemoryGame from './MemoryGame'
 
 const QUIZ_LENGTH = 10
 const MIN_PICK    = 4
@@ -26,16 +28,35 @@ function shuffle(arr) {
 
 /* ─── Root ───────────────────────────────────────────────────────── */
 export default function PracticeScreen({ user }) {
-  const [view, setView]         = useState('hub')
-  const [dir, setDir]           = useState('en-he')
-  const [exType, setExType]     = useState('quiz')  // 'quiz'|'write'|'match'|'grammar'
-  const [source, setSource]     = useState('own')
+  const { currentWords, setCurrentWords, wordCount, setWordCount, pastSessions, loadSessions, saveSession } = useSession()
+
+  const [view, setView]          = useState('hub')
+  const [dir, setDir]            = useState('en-he')
+  const [exType, setExType]      = useState('quiz')
+  const [source, setSource]      = useState('own')
   const [customWords, setCustom] = useState([])
-  const [result, setResult]     = useState(null)
+  const [result, setResult]      = useState(null)
+
+  useEffect(() => { loadSessions() }, [loadSessions])
 
   const goHub = () => setView('hub')
-  // destination view after source/pick/level/type selection
-  const dest = exType
+  const dest  = exType
+
+  // Saves words as new session + starts exercise
+  function startWithWords(words) {
+    saveSession(words)
+    setCustom(words)
+    setSource('custom')
+    setView(dest)
+  }
+
+  // Uses currentWords from context directly (no new session saved)
+  function startWithCurrent(exerciseType, direction) {
+    setCustom(currentWords)
+    setSource('custom')
+    if (exerciseType === 'quiz') { setDir(direction); setView('quiz') }
+    else { setExType(exerciseType); setView(exerciseType) }
+  }
 
   if (view === 'story') return <StoryScreen user={user} onBack={goHub} />
 
@@ -48,6 +69,7 @@ export default function PracticeScreen({ user }) {
       onPick={() => setView('pick')}
       onType={() => setView('type-words')}
       onWrong={() => { setSource('wrong'); setView(dest) }}
+      onQuickRandom={words => startWithWords(words)}
     />
   )
 
@@ -55,7 +77,7 @@ export default function PracticeScreen({ user }) {
     <LevelView
       user={user}
       onBack={() => setView('source')}
-      onStart={words => { setCustom(words); setSource('custom'); setView(dest) }}
+      onStart={words => startWithWords(words)}
     />
   )
 
@@ -63,7 +85,7 @@ export default function PracticeScreen({ user }) {
     <PickView
       user={user}
       onBack={() => setView('source')}
-      onStart={words => { setCustom(words); setSource('custom'); setView(dest) }}
+      onStart={words => startWithWords(words)}
     />
   )
 
@@ -71,7 +93,7 @@ export default function PracticeScreen({ user }) {
     <TypeView
       user={user}
       onBack={() => setView('source')}
-      onStart={words => { setCustom(words); setSource('custom'); setView(dest) }}
+      onStart={words => startWithWords(words)}
     />
   )
 
@@ -107,6 +129,13 @@ export default function PracticeScreen({ user }) {
     />
   )
 
+  if (view === 'memory') return (
+    <MemoryGame
+      user={user} source={source} customWords={customWords}
+      onBack={goHub}
+    />
+  )
+
   if (view === 'results') return (
     <ResultsView
       score={result.score} total={result.total}
@@ -117,80 +146,188 @@ export default function PracticeScreen({ user }) {
 
   return (
     <HubView
+      currentWords={currentWords}
+      wordCount={wordCount}
+      setWordCount={setWordCount}
+      pastSessions={pastSessions}
+      onLoadSession={s => setCurrentWords(s.words)}
+      onStartWithCurrent={startWithCurrent}
+      onChooseWords={exerciseType => {
+        setExType(exerciseType === 'quiz' ? 'quiz' : exerciseType)
+        setView('source')
+      }}
       onStart={d => { setDir(d); setExType('quiz'); setView('source') }}
       onStory={() => setView('story')}
       onSentenceWrite={() => { setExType('write'); setView('source') }}
       onSentenceMatch={() => { setExType('match'); setView('source') }}
       onGrammar={() => { setExType('grammar'); setView('source') }}
+      onMemory={() => { setExType('memory'); setView('source') }}
     />
   )
 }
 
+/* ─── Month label helper ─────────────────────────────────────────── */
+function monthLabel(iso) {
+  const d = new Date(iso)
+  const months = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳']
+  return `${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
+}
+
 /* ─── Hub ────────────────────────────────────────────────────────── */
-function HubView({ onStart, onStory, onSentenceWrite, onSentenceMatch, onGrammar }) {
+function HubView({
+  onStart, onStory, onSentenceWrite, onSentenceMatch, onGrammar, onMemory,
+  onChooseWords, onStartWithCurrent,
+  currentWords, wordCount, setWordCount,
+  pastSessions, onLoadSession,
+}) {
+  const hasCurrent = currentWords.length > 0
+
+  const grouped = pastSessions.reduce((acc, s) => {
+    const key = monthLabel(s.created_at)
+    if (!acc[key]) acc[key] = []
+    acc[key].push(s)
+    return acc
+  }, {})
+  const monthKeys = Object.keys(grouped)
+
+  function modeClick(type, param) {
+    if (hasCurrent) onStartWithCurrent(type, param)
+    else {
+      if (type === 'quiz')    onStart(param)
+      else if (type === 'story')   onStory()
+      else if (type === 'write')   onSentenceWrite()
+      else if (type === 'match')   onSentenceMatch()
+      else if (type === 'grammar') onGrammar()
+      else if (type === 'memory')  onMemory()
+    }
+  }
+
   return (
     <div style={s.wrap}>
       <div style={s.pageHeader}>
         <h2 style={s.pageTitle}>תרגול</h2>
-        <p style={s.pageSub}>בחר מצב תרגול</p>
+        <p style={s.pageSub}>{hasCurrent ? 'יש קבוצת מילים פעילה' : 'בחר מצב תרגול'}</p>
       </div>
 
-      <button style={{ ...s.modeCard, background: c.ink }} onClick={() => onStart('en-he')}>
+      {/* Current session */}
+      {hasCurrent && (
+        <div style={s.currentCard}>
+          <div style={s.currentLabel}>קבוצה פעילה</div>
+          <div style={s.currentWords}>
+            {currentWords.slice(0, 5).map(w => (
+              <span key={w.word} style={s.currentChip}>{w.word}</span>
+            ))}
+            {currentWords.length > 5 && (
+              <span style={s.currentMore}>+{currentWords.length - 5}</span>
+            )}
+          </div>
+          <div style={s.currentFooter}>
+            <span style={s.currentCount}>{currentWords.length} מילים</span>
+            <button style={s.changeBtn} onClick={() => onChooseWords('quiz')}>שנה מילים</button>
+          </div>
+        </div>
+      )}
+
+      {/* Word count stepper */}
+      <div style={s.countRow}>
+        <span style={s.countLabel}>כמות מילים לתרגול:</span>
+        <div style={s.stepper}>
+          <button style={s.stepBtn} onClick={() => setWordCount(Math.max(4, wordCount - 2))}>−</button>
+          <span style={s.stepVal}>{wordCount}</span>
+          <button style={s.stepBtn} onClick={() => setWordCount(Math.min(30, wordCount + 2))}>+</button>
+        </div>
+      </div>
+
+      {/* Mode cards */}
+      <button style={{ ...s.modeCard, background: c.ink }} onClick={() => modeClick('quiz', 'en-he')}>
         <div style={s.modeLangs}>
           <span style={{ color: c.mint, fontWeight: 700 }}>EN</span>
           <span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span>
           <span style={{ color: 'rgba(255,255,255,0.6)' }}>עב</span>
         </div>
         <div style={s.modeTitle}>אנגלית → עברית</div>
-        <div style={s.modeSub}>ראה מילה באנגלית, בחר תרגום</div>
+        <div style={s.modeSub}>{hasCurrent ? 'תרגל את הקבוצה הפעילה' : 'ראה מילה באנגלית, בחר תרגום'}</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
-      <button style={{ ...s.modeCard, background: c.sky }} onClick={() => onStart('he-en')}>
+      <button style={{ ...s.modeCard, background: c.sky }} onClick={() => modeClick('quiz', 'he-en')}>
         <div style={s.modeLangs}>
           <span style={{ color: '#fff', fontWeight: 700 }}>עב</span>
           <span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span>
           <span style={{ color: 'rgba(255,255,255,0.7)' }}>EN</span>
         </div>
         <div style={s.modeTitle}>עברית → אנגלית</div>
-        <div style={s.modeSub}>ראה תרגום, בחר מילה באנגלית</div>
+        <div style={s.modeSub}>{hasCurrent ? 'תרגל את הקבוצה הפעילה' : 'ראה תרגום, בחר מילה באנגלית'}</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
-      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.gold},#c87800)` }} onClick={onStory}>
+      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.gold},#c87800)` }} onClick={() => modeClick('story')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>✦</span></div>
         <div style={s.modeTitle}>סיפורים</div>
         <div style={s.modeSub}>צור סיפור AI עם המילים שלך</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
-      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.mint},#1a9e80)` }} onClick={onSentenceWrite}>
+      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.mint},#1a9e80)` }} onClick={() => modeClick('write')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>✍</span></div>
         <div style={s.modeTitle}>כתיבת משפטים</div>
         <div style={s.modeSub}>כתוב משפטים עם המילים, AI יתקן</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
-      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.rose},#a03050)` }} onClick={onSentenceMatch}>
+      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.rose},#a03050)` }} onClick={() => modeClick('match')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>🔗</span></div>
         <div style={s.modeTitle}>התאמת משפטים</div>
         <div style={s.modeSub}>התאם בין משפטים למילים</div>
         <span style={s.modeChevron}>←</span>
       </button>
 
-      <button style={{ ...s.modeCard, background: 'linear-gradient(135deg,#7c3aed,#5b21b6)' }} onClick={onGrammar}>
+      <button style={{ ...s.modeCard, background: 'linear-gradient(135deg,#7c3aed,#5b21b6)' }} onClick={() => modeClick('grammar')}>
         <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>📝</span></div>
         <div style={s.modeTitle}>מבחן דקדוק</div>
         <div style={s.modeSub}>שאלות על זמנים דקדוקיים באנגלית</div>
         <span style={s.modeChevron}>←</span>
       </button>
+
+      <button style={{ ...s.modeCard, background: 'linear-gradient(135deg,#f59e0b,#d97706)' }} onClick={() => modeClick('memory')}>
+        <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>🎴</span></div>
+        <div style={s.modeTitle}>משחק זיכרון</div>
+        <div style={s.modeSub}>{hasCurrent ? `${currentWords.length} זוגות — הפוך וגלה` : 'מצא זוגות: אנגלית + עברית'}</div>
+        <span style={s.modeChevron}>←</span>
+      </button>
+
+      {/* Past sessions */}
+      {monthKeys.length > 0 && (
+        <div style={s.historySection}>
+          <div style={s.historyTitle}>מילים שתרגלת</div>
+          {monthKeys.map(month => (
+            <div key={month} style={{ marginBottom: 16 }}>
+              <div style={s.monthLabel}>{month}</div>
+              <div style={s.sessionRow}>
+                {grouped[month].map(session => (
+                  <button
+                    key={session.id}
+                    style={s.sessionCard}
+                    onClick={() => onLoadSession(session)}
+                  >
+                    <div style={s.sessionWord}>{session.words[0]?.word ?? '—'}</div>
+                    <div style={s.sessionCount}>{session.words.length} מילים</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 /* ─── Source selection ───────────────────────────────────────────── */
-function SourceView({ user, onBack, onOwn, onLevel, onPick, onType, onWrong }) {
-  const [wrongCount, setWrongCount] = useState(null)
+function SourceView({ user, onBack, onOwn, onLevel, onPick, onType, onWrong, onQuickRandom }) {
+  const { wordCount, setWordCount } = useSession()
+  const [wrongCount,   setWrongCount]   = useState(null)
+  const [randLoading,  setRandLoading]  = useState(false)
 
   useEffect(() => {
     supabase.from('user_words')
@@ -201,6 +338,19 @@ function SourceView({ user, onBack, onOwn, onLevel, onPick, onType, onWrong }) {
       .then(({ count }) => setWrongCount(count ?? 0))
   }, [])
 
+  async function handleQuickRandom() {
+    setRandLoading(true)
+    const { data } = await supabase
+      .from('user_words')
+      .select('id, word, translation, level, correct_streak, wrong_count')
+      .eq('user_id', user.id)
+      .not('translation', 'is', null)
+    const picked = shuffle(data ?? []).slice(0, wordCount)
+    setRandLoading(false)
+    if (picked.length < MIN_PICK) return
+    onQuickRandom(picked)
+  }
+
   return (
     <div style={s.wrap}>
       <div style={s.topRow}>
@@ -209,6 +359,18 @@ function SourceView({ user, onBack, onOwn, onLevel, onPick, onType, onWrong }) {
       <div style={s.pageHeader}>
         <h2 style={s.pageTitle}>בחר מילים</h2>
         <p style={s.pageSub}>מאיפה תרגל?</p>
+      </div>
+
+      {/* Quick random */}
+      <div style={s.quickRow}>
+        <div style={s.stepper}>
+          <button style={s.stepBtn} onClick={() => setWordCount(Math.max(4, wordCount - 2))}>−</button>
+          <span style={s.stepVal}>{wordCount}</span>
+          <button style={s.stepBtn} onClick={() => setWordCount(Math.min(30, wordCount + 2))}>+</button>
+        </div>
+        <button style={s.quickRandBtn} onClick={handleQuickRandom} disabled={randLoading}>
+          {randLoading ? '...' : `✦ ${wordCount} מילים אקראיות`}
+        </button>
       </div>
 
       <button style={s.sourceCard} onClick={onOwn}>
@@ -269,9 +431,10 @@ function SourceView({ user, onBack, onOwn, onLevel, onPick, onType, onWrong }) {
 
 /* ─── Word picker ────────────────────────────────────────────────── */
 function PickView({ user, onBack, onStart }) {
-  const [words, setWords]     = useState([])
+  const { wordCount } = useSession()
+  const [words, setWords]       = useState([])
   const [selected, setSelected] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
     supabase.from('user_words')
@@ -289,7 +452,7 @@ function PickView({ user, onBack, onStart }) {
   }
 
   function pickRandom() {
-    setSelected(shuffle(words).slice(0, Math.min(QUIZ_LENGTH, words.length)))
+    setSelected(shuffle(words).slice(0, Math.min(wordCount, words.length)))
   }
 
   if (loading) return <Spinner label="טוען מילים..." />
@@ -1129,6 +1292,83 @@ const s = {
     color: c.ink3, cursor: 'pointer', fontSize: 13,
     padding: '4px 0', fontFamily: 'inherit',
   },
+
+  /* current session card */
+  currentCard: {
+    background: c.ink, borderRadius: 14, padding: '16px',
+    marginBottom: 14, direction: 'rtl',
+  },
+  currentLabel: {
+    fontSize: 10, fontWeight: 600, letterSpacing: '1.5px',
+    color: c.mint, textTransform: 'uppercase', marginBottom: 8,
+  },
+  currentWords: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  currentChip: {
+    background: 'rgba(255,255,255,0.1)', color: '#fff',
+    borderRadius: 6, padding: '3px 9px', fontSize: 13, fontWeight: 500,
+  },
+  currentMore: { color: 'rgba(255,255,255,0.4)', fontSize: 12, alignSelf: 'center' },
+  currentFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  currentCount: { color: 'rgba(255,255,255,0.45)', fontSize: 12 },
+  changeBtn: {
+    background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: 7, color: 'rgba(255,255,255,0.7)',
+    cursor: 'pointer', fontSize: 12, padding: '5px 12px', fontFamily: 'inherit',
+  },
+
+  /* word count stepper */
+  countRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 14, direction: 'rtl',
+  },
+  countLabel: { fontSize: 13, color: c.ink3 },
+  stepper: { display: 'flex', alignItems: 'center', gap: 10 },
+  stepBtn: {
+    background: c.surface, border: `1px solid ${c.border}`,
+    borderRadius: 7, width: 30, height: 30,
+    cursor: 'pointer', fontSize: 18, color: c.ink2,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: 'inherit', lineHeight: 1,
+  },
+  stepVal: { fontSize: 16, fontWeight: 600, color: c.ink, minWidth: 28, textAlign: 'center' },
+
+  /* quick random row (SourceView) */
+  quickRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    gap: 10, marginBottom: 14, background: c.mintL,
+    border: `1px solid ${c.mint}`, borderRadius: 12, padding: '10px 14px',
+  },
+  quickRandBtn: {
+    background: c.mint, border: 'none', borderRadius: 8,
+    color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500,
+    padding: '8px 14px', fontFamily: 'inherit', whiteSpace: 'nowrap',
+  },
+
+  /* session history */
+  historySection: {
+    marginTop: 28, paddingTop: 20,
+    borderTop: `1px solid ${c.border}`,
+  },
+  historyTitle: {
+    fontSize: 11, fontWeight: 600, letterSpacing: '1.2px',
+    textTransform: 'uppercase', color: c.ink3, marginBottom: 14,
+  },
+  monthLabel: {
+    fontSize: 12, fontWeight: 600, color: c.ink2,
+    marginBottom: 8, direction: 'rtl',
+  },
+  sessionRow: {
+    display: 'flex', gap: 8, overflowX: 'auto',
+    paddingBottom: 4, scrollbarWidth: 'none',
+  },
+  sessionCard: {
+    background: c.white, border: `1px solid ${c.border}`,
+    borderRadius: 12, padding: '12px 14px',
+    cursor: 'pointer', fontFamily: 'inherit',
+    textAlign: 'right', flexShrink: 0, minWidth: 100,
+  },
+  sessionWord: { fontSize: 14, fontWeight: 600, color: c.ink, marginBottom: 4, direction: 'ltr' },
+  sessionCount: { fontSize: 11, color: c.ink3 },
 
   /* hub mode cards */
   modeCard: {

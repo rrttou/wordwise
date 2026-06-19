@@ -55,13 +55,16 @@ function StoryText({ text, selectedWords, translationMap }) {
 export default function StoryScreen({ user, onBack }) {
   const [bank, setBank]         = useState([])
   const [loading, setLoading]   = useState(true)
-  const [mode, setMode]         = useState('pick')   // 'pick' | 'type'
+  const [mode, setMode]         = useState('pick')
   const [levelFilter, setLevel] = useState('all')
   const [selected, setSelected] = useState([])
   const [typeInput, setInput]   = useState('')
   const [story, setStory]       = useState('')
   const [generating, setGen]    = useState(false)
   const [error, setError]       = useState('')
+  const [wordModal, setWordModal]   = useState(false)
+  const [search, setSearch]         = useState('')
+  const [bankSource, setBankSource] = useState('own')
 
   const translationMap = Object.fromEntries(
     bank.filter(w => w.translation).map(w => [w.word.toLowerCase(), w.translation])
@@ -78,15 +81,31 @@ export default function StoryScreen({ user, onBack }) {
   const wordsToUse  = mode === 'type' ? typeWords : selected
   const canGenerate = wordsToUse.length >= MIN_WORDS && !generating
 
-  useEffect(() => { loadBank() }, [])
+  useEffect(() => { loadBank(bankSource) }, [bankSource])
 
-  async function loadBank() {
+  async function loadBank(src) {
     setLoading(true)
-    const { data } = await supabase
-      .from('user_words')
-      .select('word, translation, level, story_count')
-      .order('created_at', { ascending: false })
-    setBank(data || [])
+    setSelected([])
+    setStory('')
+    setError('')
+    if (src === 'global') {
+      const { data: profile } = await supabase
+        .from('profiles').select('current_level').eq('id', user.id).single()
+      const userLevel = profile?.current_level ?? 'B1'
+      setLevel(userLevel)
+      const { data } = await supabase
+        .from('global_words')
+        .select('word, translation, level')
+        .not('translation', 'is', null)
+        .limit(1000)
+      setBank(data || [])
+    } else {
+      const { data } = await supabase
+        .from('user_words')
+        .select('word, translation, level, story_count')
+        .order('created_at', { ascending: false })
+      setBank(data || [])
+    }
     setLoading(false)
   }
 
@@ -176,70 +195,40 @@ export default function StoryScreen({ user, onBack }) {
         <p style={s.pageSub}>בחר {MIN_WORDS}–{MAX_WORDS} מילים וקבל סיפור שנכתב בשבילך</p>
       </div>
 
-      {/* Mode tabs */}
-      <div style={s.modeTabs}>
-        <button
-          style={{ ...s.modeTab, ...(mode === 'pick' ? s.modeTabOn : {}) }}
-          onClick={() => { setMode('pick'); setStory(''); setError('') }}
-        >✏️ בחר מילים</button>
-        <button
-          style={{ ...s.modeTab, ...(mode === 'type' ? s.modeTabOn : {}) }}
-          onClick={() => { setMode('type'); setStory(''); setError('') }}
-        >⌨️ הזן מילים</button>
+      {/* Bank source toggle */}
+      <div style={s.sourceToggle}>
+        {[['own', '📚 המילים שלי'], ['global', '🌍 מאגר עולמי']].map(([key, label]) => (
+          <button
+            key={key}
+            style={{ ...s.sourceToggleBtn, ...(bankSource === key ? s.sourceToggleBtnOn : {}) }}
+            onClick={() => setBankSource(key)}
+          >{label}</button>
+        ))}
       </div>
 
-      {mode === 'pick' ? (
-        <div style={s.pickerCard}>
-          {/* Level filter pills */}
-          <div style={s.levelPills}>
-            <button
-              style={{ ...s.levelPill, ...(levelFilter === 'all' ? s.levelPillOn : {}) }}
-              onClick={() => setLevel('all')}
-            >הכל</button>
-            {LEVELS.map(lv => {
-              const count = bank.filter(w => w.level === lv).length
-              return (
-                <button
-                  key={lv}
-                  style={{ ...s.levelPill, ...(levelFilter === lv ? s.levelPillOn : {}), ...(count === 0 ? { opacity: 0.35 } : {}) }}
-                  onClick={() => count > 0 && setLevel(lv)}
-                  disabled={count === 0}
-                >{lv}</button>
-              )
-            })}
-          </div>
+      {/* Action row: choose words + create story */}
+      <div style={s.actionRow}>
+        <button style={s.chooseBtn} onClick={() => setWordModal(true)}>
+          📋 {selected.length > 0 ? `${selected.length}/${MAX_WORDS} מילים נבחרו` : 'בחר מילים'}
+        </button>
+        <button
+          style={{ ...s.generateBtn, opacity: canGenerate ? 1 : 0.5 }}
+          onClick={generate}
+          disabled={!canGenerate}
+        >
+          {generating
+            ? <span style={{ display:'flex', alignItems:'center', gap:6, justifyContent:'center' }}><span style={s.ringSmall} />כותב...</span>
+            : '✦ צור סיפור'}
+        </button>
+      </div>
 
-          <div style={s.pickerHead}>
-            <span style={s.pickerLabel}>
-              {selected.length > 0
-                ? `${selected.length}/${MAX_WORDS} נבחרו`
-                : 'בחר מילים'}
-            </span>
-            <button style={s.randomBtn} onClick={pickRandom}>✦ בחר אקראי</button>
-          </div>
+      {/* Type mode toggle */}
+      <button
+        style={{ ...s.typeToggle, ...(mode === 'type' ? s.typeToggleOn : {}) }}
+        onClick={() => { setMode(m => m === 'type' ? 'pick' : 'type'); setStory(''); setError('') }}
+      >⌨️ הזן מילים ידנית</button>
 
-          <div style={s.chips}>
-            {filteredBank.map(({ word }) => {
-              const on = selected.includes(word)
-              const maxed = selected.length >= MAX_WORDS && !on
-              return (
-                <button
-                  key={word}
-                  style={{ ...s.chip, ...(on ? s.chipOn : {}), ...(maxed ? s.chipDim : {}) }}
-                  onClick={() => !maxed && toggle(word)}
-                  disabled={maxed}
-                >
-                  {word}
-                </button>
-              )
-            })}
-          </div>
-
-          {selected.length > 0 && selected.length < MIN_WORDS && (
-            <p style={s.hint}>בחר עוד {MIN_WORDS - selected.length} מילים לפחות</p>
-          )}
-        </div>
-      ) : (
+      {mode === 'type' && (
         <div style={s.typeCard}>
           <textarea
             style={s.typeArea}
@@ -257,18 +246,71 @@ export default function StoryScreen({ user, onBack }) {
         </div>
       )}
 
-      {/* Generate button */}
-      <button
-        style={{ ...s.generateBtn, opacity: canGenerate ? 1 : 0.5 }}
-        onClick={generate}
-        disabled={!canGenerate}
-      >
-        {generating ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-            <span style={s.ringSmall} /> כותב סיפור...
-          </span>
-        ) : '✦ צור סיפור'}
-      </button>
+      {/* Word picker modal */}
+      {wordModal && (
+        <div style={s.overlay} onClick={() => setWordModal(false)}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+            <div style={s.modalHead}>
+              <span style={s.modalTitle}>בחר מילים ({selected.length}/{MAX_WORDS})</span>
+              <button style={s.modalClose} onClick={() => setWordModal(false)}>✕</button>
+            </div>
+            <div style={s.levelPills}>
+              <button style={{ ...s.levelPill, ...(levelFilter === 'all' ? s.levelPillOn : {}) }} onClick={() => setLevel('all')}>הכל</button>
+              {LEVELS.map(lv => {
+                const count = bank.filter(w => w.level === lv).length
+                return (
+                  <button key={lv}
+                    style={{ ...s.levelPill, ...(levelFilter === lv ? s.levelPillOn : {}), ...(count === 0 ? { opacity: 0.35 } : {}) }}
+                    onClick={() => count > 0 && setLevel(lv)} disabled={count === 0}
+                  >{lv}</button>
+                )
+              })}
+            </div>
+            <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+              <input style={s.modalSearch} placeholder="חיפוש..." value={search} onChange={e => setSearch(e.target.value)} dir="ltr" />
+              <button style={s.randomBtn} onClick={() => { pickRandom(); setWordModal(false) }}>✦ אקראי</button>
+            </div>
+            <div style={s.modalBody}>
+              <table style={s.table}>
+                <thead>
+                  <tr>
+                    <th style={s.th} />
+                    <th style={s.th}>מילה</th>
+                    <th style={s.th}>תרגום</th>
+                    <th style={{ ...s.th, textAlign:'center' }}>רמה</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBank
+                    .filter(w => !search || w.word.toLowerCase().includes(search.toLowerCase()))
+                    .map(({ word, translation, level }) => {
+                      const on = selected.includes(word)
+                      const maxed = selected.length >= MAX_WORDS && !on
+                      return (
+                        <tr key={word}
+                          style={{ ...s.tr, opacity: maxed ? 0.4 : 1, cursor: maxed ? 'default' : 'pointer' }}
+                          onClick={() => !maxed && toggle(word)}>
+                          <td style={s.td}><span style={{ ...s.checkbox, ...(on ? s.checkboxOn : {}) }}>{on ? '✓' : ''}</span></td>
+                          <td style={{ ...s.td, direction:'ltr', fontWeight: on ? 600 : 400, color: on ? c.mintD : c.ink }}>{word}</td>
+                          <td style={{ ...s.td, color:c.ink2, fontSize:12 }}>{translation || '—'}</td>
+                          <td style={{ ...s.td, textAlign:'center' }}>
+                            {level && <span style={{ ...s.levelBadge, ...getLevelStyle(level) }}>{level}</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+            <button
+              style={{ ...s.modalConfirm, opacity: selected.length >= MIN_WORDS ? 1 : 0.5 }}
+              onClick={() => setWordModal(false)}
+            >
+              {selected.length >= MIN_WORDS ? `✓ אשר (${selected.length} מילים)` : `בחר עוד ${MIN_WORDS - selected.length} לפחות`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && <p style={s.errMsg}>{error}</p>}
 
@@ -301,6 +343,11 @@ export default function StoryScreen({ user, onBack }) {
   )
 }
 
+function getLevelStyle(level) {
+  if (level === 'A1' || level === 'A2') return { background: '#e8faf5', color: '#1a9e80', borderColor: '#2ec4a0' }
+  if (level === 'B1' || level === 'B2') return { background: '#eef4ff', color: '#4080f0', borderColor: '#4080f0' }
+  return { background: '#f3e8ff', color: '#7c3aed', borderColor: '#c4b5fd' }
+}
 /* ─── Styles ─────────────────────────────────────────────────────── */
 const s = {
   wrap: { maxWidth: 420, margin: '0 auto', padding: '20px 16px 32px', direction: 'rtl' },
@@ -316,52 +363,98 @@ const s = {
     padding: '0 0 16px 0', fontFamily: 'inherit',
   },
 
-  /* mode tabs */
-  modeTabs: { display: 'flex', gap: 8, marginBottom: 12 },
-  modeTab: {
-    flex: 1, padding: '9px', borderRadius: 10,
-    border: `1.5px solid ${c.border}`,
-    background: c.white, color: c.ink3,
-    cursor: 'pointer', fontSize: 13,
-    fontFamily: 'inherit', fontWeight: 500,
+  /* source toggle */
+  sourceToggle: {
+    display:'flex', gap:6, marginBottom:12,
+    background:c.surface, borderRadius:10, padding:4,
   },
-  modeTabOn: { background: c.mintL, borderColor: c.mint, color: c.mintD },
+  sourceToggleBtn: {
+    flex:1, padding:'8px', borderRadius:8, border:'none',
+    background:'transparent', color:c.ink3, cursor:'pointer',
+    fontSize:13, fontFamily:'inherit', fontWeight:500,
+  },
+  sourceToggleBtnOn: {
+    background:c.white, color:c.ink,
+    boxShadow:'0 1px 4px rgba(0,0,0,0.08)',
+  },
+  /* action row */
+  actionRow: { display:'flex', gap:8, marginBottom:10 },
+  chooseBtn: {
+    flex:1, background:c.white, border:`1.5px solid ${c.mint}`,
+    borderRadius:10, padding:'11px 10px', fontSize:13,
+    color:c.mintD, cursor:'pointer', fontFamily:'inherit', fontWeight:500,
+  },
+  typeToggle: {
+    display:'block', width:'100%', background:'transparent',
+    border:`1px solid ${c.border}`, borderRadius:8,
+    padding:'7px', fontSize:12, color:c.ink3, cursor:'pointer',
+    fontFamily:'inherit', marginBottom:10, textAlign:'center', boxSizing:'border-box',
+  },
+  typeToggleOn: { background:c.skyL, borderColor:c.sky, color:c.sky },
 
-  /* picker */
-  pickerCard: {
-    background: c.white, border: `1px solid ${c.border}`,
-    borderRadius: 14, padding: 16, marginBottom: 14,
+  /* modal */
+  overlay: {
+    position:'fixed', top:0, left:0, right:0, bottom:0,
+    background:'rgba(0,0,0,0.45)', zIndex:100,
+    display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px',
   },
+  modal: {
+    background:c.white, borderRadius:16,
+    padding:'20px 16px 24px', width:'100%', maxWidth:440,
+    maxHeight:'84vh', display:'flex', flexDirection:'column', boxSizing:'border-box',
+  },
+  modalHead: {
+    display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14,
+  },
+  modalTitle: { fontSize:16, fontWeight:600, color:c.ink },
+  modalClose: {
+    background:'transparent', border:'none', fontSize:20,
+    color:c.ink3, cursor:'pointer', padding:0, lineHeight:1, fontFamily:'inherit',
+  },
+  modalSearch: {
+    flex:1, background:c.surface, border:`1.5px solid ${c.border}`,
+    borderRadius:8, padding:'8px 12px', fontSize:13, color:c.ink,
+    outline:'none', fontFamily:'inherit', direction:'ltr',
+  },
+  modalBody: { flex:1, overflowY:'auto', marginBottom:12 },
+  modalConfirm: {
+    background:c.mint, color:'#fff', border:'none', borderRadius:10,
+    padding:'13px', fontSize:14, fontWeight:500,
+    cursor:'pointer', width:'100%', fontFamily:'inherit', marginTop:4,
+  },
+
+  /* table */
+  table: { width:'100%', borderCollapse:'collapse', fontSize:13 },
+  th: {
+    textAlign:'right', padding:'7px 10px', fontSize:11,
+    color:c.ink3, borderBottom:`2px solid ${c.border}`, fontWeight:500,
+  },
+  tr: { borderBottom:`1px solid ${c.border}` },
+  td: { padding:'9px 10px', verticalAlign:'middle' },
+  checkbox: {
+    display:'inline-flex', alignItems:'center', justifyContent:'center',
+    width:18, height:18, border:`1.5px solid ${c.border}`,
+    borderRadius:4, fontSize:11, color:'transparent', flexShrink:0,
+  },
+  checkboxOn: { background:c.mint, borderColor:c.mint, color:'#fff' },
+  levelBadge: {
+    display:'inline-block', padding:'2px 7px',
+    borderRadius:6, fontSize:11, fontWeight:600, border:'1px solid',
+  },
+
+  /* level pills (inside modal) */
   levelPills: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 },
   levelPill: {
-    padding: '4px 10px', borderRadius: 20,
-    border: `1px solid ${c.border}`,
-    background: c.white, color: c.ink3,
-    cursor: 'pointer', fontSize: 11, fontWeight: 500,
-    fontFamily: 'inherit',
+    padding: '4px 10px', borderRadius: 20, border: `1px solid ${c.border}`,
+    background: c.white, color: c.ink3, cursor: 'pointer',
+    fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
   },
   levelPillOn: { background: c.ink, color: '#fff', borderColor: c.ink },
-  pickerHead: {
-    display: 'flex', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 14,
-  },
-  pickerLabel: { fontSize: 13, fontWeight: 500, color: c.ink2 },
   randomBtn: {
-    background: c.skyL, border: `1px solid ${c.sky}`,
-    borderRadius: 8, color: c.sky,
+    background: c.skyL, border: `1px solid ${c.sky}`, borderRadius: 8, color: c.sky,
     cursor: 'pointer', fontSize: 12, fontWeight: 500,
-    padding: '6px 12px', fontFamily: 'inherit',
+    padding: '6px 12px', fontFamily: 'inherit', whiteSpace:'nowrap',
   },
-  chips: { display: 'flex', flexWrap: 'wrap', gap: 6, direction: 'ltr' },
-  chip: {
-    background: c.surface, border: `1.5px solid ${c.border}`,
-    borderRadius: 8, padding: '5px 11px',
-    fontSize: 13, color: c.ink2,
-    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-  },
-  chipOn:  { background: c.mintL, border: `1.5px solid ${c.mint}`, color: c.mintD, fontWeight: 500 },
-  chipDim: { opacity: 0.35, cursor: 'default' },
-  hint: { fontSize: 12, color: c.ink3, textAlign: 'center', marginTop: 12 },
 
   /* type mode */
   typeCard: {
@@ -379,9 +472,8 @@ const s = {
   /* generate */
   generateBtn: {
     background: c.mint, color: '#fff', border: 'none',
-    borderRadius: 12, padding: '15px', fontSize: 15, fontWeight: 500,
-    cursor: 'pointer', width: '100%', fontFamily: 'inherit',
-    marginBottom: 16, transition: 'opacity 0.2s',
+    borderRadius: 10, padding: '11px 14px', fontSize: 14, fontWeight: 500,
+    cursor: 'pointer', flex:1, fontFamily: 'inherit', transition: 'opacity 0.2s',
   },
   errMsg: { color: c.rose, fontSize: 13, textAlign: 'center', marginBottom: 12 },
 

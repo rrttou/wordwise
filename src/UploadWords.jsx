@@ -58,6 +58,8 @@ export default function UploadWords({ user }) {
   const [toast, setToast]         = useState(null)
   const [setupNeeded, setSetup]   = useState(false)
   const [filter, setFilter]       = useState('')
+  const [sortBy, setSortBy]       = useState('alpha')
+  const [bankModal, setBankModal] = useState(false)
   const fileRef = useRef()
 
   useEffect(() => { loadBank() }, [])
@@ -239,7 +241,19 @@ export default function UploadWords({ user }) {
   }
 
   const activeSrc = SOURCES.find(s => s.id === src)
-  const filteredBank = filter ? saved.filter(w => w.word.includes(filter.toLowerCase())) : saved
+  const LEVEL_ORDER = { A1: 1, A2: 2, B1: 3, B2: 4, C1: 5, C2: 6 }
+  const filteredBank = filter
+    ? saved.filter(w => w.word.toLowerCase().includes(filter.toLowerCase()))
+    : saved
+  const displayedBank = [...filteredBank].sort((a, b) => {
+    if (sortBy === 'alpha') return a.word.localeCompare(b.word)
+    if (sortBy === 'level') {
+      const la = LEVEL_ORDER[a.level] ?? 99
+      const lb = LEVEL_ORDER[b.level] ?? 99
+      return la !== lb ? la - lb : a.word.localeCompare(b.word)
+    }
+    return 0
+  })
 
   return (
     <div style={s.wrap}>
@@ -351,56 +365,88 @@ export default function UploadWords({ user }) {
         </div>
       )}
 
-      {/* Word bank */}
-      <div style={s.bankSection}>
-        <div style={s.bankHead}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h3 style={s.bankTitle}>מאגר המילים שלי</h3>
-            <span style={s.bankBadge}>{saved.length}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {/* Word bank button */}
+      <button style={s.bankOpenBtn} onClick={() => setBankModal(true)}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <span style={s.bankTitle}>מאגר המילים שלי</span>
+          {!loadingBank && <span style={s.bankBadge}>{saved.length}</span>}
+        </div>
+        <span style={{ color:c.ink3, fontSize:13 }}>← פתח</span>
+      </button>
+
+      {/* Word bank modal */}
+      {bankModal && (
+        <div style={s.overlay} onClick={() => setBankModal(false)}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+            <div style={s.modalHead}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={s.modalTitle}>מאגר המילים שלי</span>
+                <span style={s.bankBadge}>{saved.length}</span>
+              </div>
+              <button style={s.modalClose} onClick={() => setBankModal(false)}>✕</button>
+            </div>
+
             {saved.some(w => !w.translation) && (
-              <button style={s.translateBtn} onClick={translateMissing} disabled={saving}>
+              <button style={{ ...s.translateBtn, marginBottom:12, width:'100%' }} onClick={translateMissing} disabled={saving}>
                 {saving ? '...' : '✦ תרגם חסרים'}
               </button>
             )}
-            {saved.length > 0 && (
+
+            <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' }}>
               <input
-                style={s.filterInput}
-                placeholder="🔍 חיפוש..."
+                style={{ ...s.filterInput, flex:1, minWidth:120 }}
+                placeholder="🔍 חיפוש מילה..."
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
                 dir="ltr"
               />
-            )}
+              <div style={s.sortBtns}>
+                {[['alpha','א-ב'],['level','רמה'],['date','תאריך']].map(([key,label]) => (
+                  <button key={key} style={{ ...s.sortBtn, ...(sortBy===key ? s.sortBtnOn : {}) }} onClick={() => setSortBy(key)}>{label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={s.modalBody}>
+              {loadingBank ? (
+                <p style={{ color:c.ink3, textAlign:'center', padding:24, fontSize:13 }}>טוען...</p>
+              ) : saved.length === 0 ? (
+                <div style={s.emptyBank}>
+                  <span style={{ fontSize:40 }}>📚</span>
+                  <p>עדיין אין מילים — העלה קובץ כדי להתחיל</p>
+                </div>
+              ) : displayedBank.length === 0 ? (
+                <p style={{ color:c.ink3, fontSize:13, padding:'8px 0', textAlign:'center' }}>אין תוצאות</p>
+              ) : (
+                <table style={s.table}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>מילה</th>
+                      <th style={s.th}>תרגום</th>
+                      <th style={{ ...s.th, textAlign:'center' }}>רמה</th>
+                      <th style={s.th} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedBank.map(({ word, translation, level }) => (
+                      <tr key={word} style={s.tr}>
+                        <td style={{ ...s.td, direction:'ltr', fontWeight:500, color:c.ink }}>{word}</td>
+                        <td style={{ ...s.td, color:c.ink2, fontSize:12 }}>{translation || '—'}</td>
+                        <td style={{ ...s.td, textAlign:'center' }}>
+                          {level && <span style={{ ...s.levelBadge, ...getLevelStyle(level) }}>{level}</span>}
+                        </td>
+                        <td style={{ ...s.td, textAlign:'center' }}>
+                          <button style={s.chipX} onClick={() => deleteWord(word)}>×</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
-
-        {loadingBank ? (
-          <p style={{ color: c.ink3, textAlign: 'center', padding: 24, fontSize: 13 }}>טוען...</p>
-        ) : saved.length === 0 ? (
-          <div style={s.emptyBank}>
-            <span style={{ fontSize: 40 }}>📚</span>
-            <p>עדיין אין מילים — העלה קובץ כדי להתחיל</p>
-          </div>
-        ) : (
-          <div style={s.chips}>
-            {filteredBank.map(({ word, source, translation }) => (
-              <span key={word} style={s.savedChip}>
-                <span style={{ fontSize: 11 }}>{SRC_ICON[source] || '📌'}</span>
-                <span>
-                  {word}
-                  {translation && <span style={s.chipTranslation}> · {translation}</span>}
-                </span>
-                <button style={s.chipX} onClick={() => deleteWord(word)}>×</button>
-              </span>
-            ))}
-            {filteredBank.length === 0 && (
-              <p style={{ color: c.ink3, fontSize: 13, padding: '8px 0' }}>אין תוצאות</p>
-            )}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Toast */}
       {toast && (
@@ -439,6 +485,11 @@ CREATE POLICY "users_own_words"
   )
 }
 
+function getLevelStyle(level) {
+  if (level === 'A1' || level === 'A2') return { background: '#e8faf5', color: '#1a9e80', borderColor: '#2ec4a0' }
+  if (level === 'B1' || level === 'B2') return { background: '#eef4ff', color: '#4080f0', borderColor: '#4080f0' }
+  return { background: '#f3e8ff', color: '#7c3aed', borderColor: '#c4b5fd' }
+}
 /* ─── Styles ─────────────────────────────────────────────────────── */
 const s = {
   wrap: {
@@ -665,7 +716,31 @@ const s = {
   },
 
   /* bank */
-  bankSection: { marginTop: 8 },
+  bankOpenBtn: {
+    display:'flex', justifyContent:'space-between', alignItems:'center',
+    width:'100%', background:c.white, border:`1px solid ${c.border}`,
+    borderRadius:14, padding:'14px 16px', cursor:'pointer',
+    fontFamily:'inherit', marginTop:8, boxSizing:'border-box',
+  },
+  overlay: {
+    position:'fixed', top:0, left:0, right:0, bottom:0,
+    background:'rgba(0,0,0,0.45)', zIndex:100,
+    display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px',
+  },
+  modal: {
+    background:c.white, borderRadius:16,
+    padding:'20px 16px 24px', width:'100%', maxWidth:440,
+    maxHeight:'84vh', display:'flex', flexDirection:'column', boxSizing:'border-box',
+  },
+  modalHead: {
+    display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14,
+  },
+  modalTitle: { fontSize:16, fontWeight:600, color:c.ink },
+  modalClose: {
+    background:'transparent', border:'none', fontSize:20,
+    color:c.ink3, cursor:'pointer', padding:0, lineHeight:1, fontFamily:'inherit',
+  },
+  modalBody: { flex:1, overflowY:'auto' },
   bankHead: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -711,6 +786,43 @@ const s = {
     fontSize: 13,
   },
 
+  /* table */
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
+  th: {
+    textAlign: 'right',
+    padding: '7px 10px',
+    fontSize: 11,
+    color: c.ink3,
+    borderBottom: `2px solid ${c.border}`,
+    fontWeight: 500,
+  },
+  tr: { borderBottom: `1px solid ${c.border}` },
+  td: { padding: '9px 10px', verticalAlign: 'middle' },
+  levelBadge: {
+    display: 'inline-block',
+    padding: '2px 7px',
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: 600,
+    border: '1px solid',
+  },
+  sortBtns: { display: 'flex', gap: 4 },
+  sortBtn: {
+    background: c.white,
+    border: `1px solid ${c.border}`,
+    borderRadius: 7,
+    padding: '5px 10px',
+    fontSize: 12,
+    color: c.ink3,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  sortBtnOn: {
+    background: c.mintL,
+    border: `1px solid ${c.mint}`,
+    color: c.mintD,
+    fontWeight: 500,
+  },
   /* toast */
   toast: {
     position: 'fixed',
