@@ -48,6 +48,7 @@ export default function WordPicker({ user, onDone, onCancel }) {
   const [selected,  setSelected]  = useState([])
   const [loading,   setLoading]   = useState(false)
   const [wrongOnly, setWrongOnly] = useState(false)
+  const [search,    setSearch]    = useState('')
 
   // Manual mode
   const [manualInput,   setManualInput]   = useState('')
@@ -91,6 +92,7 @@ export default function WordPicker({ user, onDone, onCancel }) {
     setLevel('all')
     setLetter(null)
     setWrongOnly(false)
+    setSearch('')
   }, [source])
 
   // Derived: words filtered by level + wrongOnly
@@ -101,9 +103,15 @@ export default function WordPicker({ user, onDone, onCancel }) {
     ? levelFiltered.filter(w => (w.wrong_count ?? 0) > 0)
     : levelFiltered
   const availableLetters = new Set(basePool.map(w => w.word[0]?.toUpperCase()).filter(Boolean))
-  const shownWords = activeLetter
-    ? basePool.filter(w => w.word[0]?.toUpperCase() === activeLetter)
-    : basePool
+  const searchTrim = search.trim().toLowerCase()
+  const shownWords = searchTrim
+    ? basePool.filter(w =>
+        w.word.toLowerCase().includes(searchTrim) ||
+        (w.translation ?? '').toLowerCase().includes(searchTrim)
+      )
+    : activeLetter
+      ? basePool.filter(w => w.word[0]?.toUpperCase() === activeLetter)
+      : basePool
 
   // Level counts (computed client-side from allWords)
   const levelCounts = {}
@@ -199,7 +207,7 @@ export default function WordPicker({ user, onDone, onCancel }) {
   }
 
   const showLevelNav = source !== 'manual'
-  const showAlphaNav = source === 'mine' || source === 'global'
+  const showAlphaNav = (source === 'mine' || source === 'global') && !searchTrim
   const activeColor  = activeLevel !== 'all' ? (LEVEL_COLOR[activeLevel] ?? c.mint) : c.mint
 
   return (
@@ -295,18 +303,28 @@ export default function WordPicker({ user, onDone, onCancel }) {
         {source === 'mine' && (
           <>
             <div style={s.actionRow}>
+              <div style={s.searchWrap}>
+                <span style={s.searchIcon}>🔍</span>
+                <input
+                  style={s.searchInput}
+                  placeholder="חיפוש מילה..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  dir="auto"
+                />
+                {search && <button style={s.clearSearch} onClick={() => setSearch('')}>✕</button>}
+              </div>
               <button
                 style={{ ...s.filterBtn, ...(wrongOnly ? s.filterBtnOn : {}) }}
                 onClick={() => setWrongOnly(v => !v)}
               >
-                שגויות בלבד
+                שגויות
               </button>
-              <span style={{ flex: 1 }} />
-              <button style={s.actionBtn} onClick={() => setSelected(shownWords)}>בחר הכל</button>
+              <button style={s.actionBtn} onClick={() => setSelected(shownWords)}>✓ הכל</button>
               <button style={s.actionBtn} onClick={() => setSelected([])}>נקה</button>
             </div>
-            <WordGrid words={shownWords} selectedKeys={selectedKeys} onToggle={toggleWord}
-              loading={loading} letter={activeLetter} />
+            <WordTable words={shownWords} selectedKeys={selectedKeys} onToggle={toggleWord}
+              loading={loading} letter={activeLetter} search={search} />
           </>
         )}
 
@@ -341,11 +359,22 @@ export default function WordPicker({ user, onDone, onCancel }) {
         {source === 'global' && (
           <>
             <div style={s.actionRow}>
-              <button style={s.actionBtn} onClick={() => setSelected(shownWords.slice(0, 20))}>בחר 20</button>
+              <div style={s.searchWrap}>
+                <span style={s.searchIcon}>🔍</span>
+                <input
+                  style={s.searchInput}
+                  placeholder="חיפוש מילה..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  dir="auto"
+                />
+                {search && <button style={s.clearSearch} onClick={() => setSearch('')}>✕</button>}
+              </div>
+              <button style={s.actionBtn} onClick={() => setSelected(shownWords.slice(0, 20))}>+20</button>
               <button style={s.actionBtn} onClick={() => setSelected([])}>נקה</button>
             </div>
-            <WordGrid words={shownWords} selectedKeys={selectedKeys} onToggle={toggleWord}
-              loading={loading} letter={activeLetter} />
+            <WordTable words={shownWords} selectedKeys={selectedKeys} onToggle={toggleWord}
+              loading={loading} letter={activeLetter} search={search} />
           </>
         )}
 
@@ -396,27 +425,41 @@ export default function WordPicker({ user, onDone, onCancel }) {
   )
 }
 
-/* ─── Word grid ──────────────────────────────────────────────────── */
-function WordGrid({ words, selectedKeys, onToggle, loading, letter }) {
+/* ─── Word table ─────────────────────────────────────────────────── */
+function WordTable({ words, selectedKeys, onToggle, loading, letter, search }) {
   if (loading) return <CenteredMsg>טוען...</CenteredMsg>
-  if (!words.length) return <CenteredMsg>{letter ? `אין מילים באות ${letter}` : 'אין מילים'}</CenteredMsg>
+  if (!words.length) {
+    const msg = search
+      ? `לא נמצאו תוצאות עבור "${search}"`
+      : letter ? `אין מילים באות ${letter}` : 'אין מילים'
+    return <CenteredMsg>{msg}</CenteredMsg>
+  }
   return (
-    <div style={s.wordGrid}>
-      {words.map(w => {
-        const on = selectedKeys.has(wordKey(w))
-        return (
-          <button
-            key={wordKey(w)}
-            style={{ ...s.wordChip, ...(on ? s.wordChipOn : {}) }}
-            onClick={() => onToggle(w)}
-          >
-            <span style={s.chipWord}>{w.word}</span>
-            <span style={s.chipTrans}>{w.translation}</span>
-            {w.level && <span style={{ ...s.chipLevel, color: LEVEL_COLOR[w.level] ?? '#8888aa' }}>{w.level}</span>}
-          </button>
-        )
-      })}
-    </div>
+    <table style={s.table}>
+      <tbody>
+        {words.map((w, i) => {
+          const on = selectedKeys.has(wordKey(w))
+          return (
+            <tr
+              key={wordKey(w)}
+              style={{ ...s.tableRow, ...(on ? s.tableRowOn : {}), ...(i % 2 === 0 ? s.tableRowEven : {}) }}
+              onClick={() => onToggle(w)}
+            >
+              <td style={s.tdCheck}>{on ? '✓' : ''}</td>
+              <td style={s.tdWord}>{w.word}</td>
+              <td style={s.tdTrans}>{w.translation}</td>
+              <td style={s.tdLevel}>
+                {w.level && (
+                  <span style={{ ...s.levelBadge, color: LEVEL_COLOR[w.level] ?? '#8888aa', borderColor: (LEVEL_COLOR[w.level] ?? '#8888aa') + '44' }}>
+                    {w.level}
+                  </span>
+                )}
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
   )
 }
 
@@ -510,17 +553,39 @@ const s = {
     fontFamily: 'inherit', whiteSpace: 'nowrap',
   },
 
-  /* Word grid */
-  wordGrid: { display: 'flex', flexWrap: 'wrap', gap: 7 },
-  wordChip: {
-    display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-    background: c.white, border: `1.5px solid ${c.border}`, borderRadius: 10,
-    padding: '7px 11px', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
+  /* Search */
+  searchWrap: {
+    display: 'flex', alignItems: 'center', flex: 1,
+    background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8,
+    padding: '0 8px', gap: 4, minWidth: 0,
   },
-  wordChipOn: { background: c.mintL, borderColor: c.mint },
-  chipWord:  { fontSize: 13, fontWeight: 600, color: c.ink, direction: 'ltr' },
-  chipTrans: { fontSize: 10, color: c.ink3, marginTop: 2 },
-  chipLevel: { fontSize: 9, fontWeight: 600, marginTop: 1 },
+  searchIcon: { fontSize: 12, flexShrink: 0, opacity: 0.5 },
+  searchInput: {
+    background: 'transparent', border: 'none', outline: 'none',
+    fontSize: 13, color: c.ink, fontFamily: 'inherit',
+    flex: 1, padding: '6px 0', minWidth: 0,
+  },
+  clearSearch: {
+    background: 'transparent', border: 'none', color: c.ink3,
+    cursor: 'pointer', fontSize: 12, padding: '2px 0', flexShrink: 0,
+  },
+
+  /* Word table */
+  table: { width: '100%', borderCollapse: 'collapse' },
+  tableRow: {
+    cursor: 'pointer', transition: 'background 0.1s',
+    borderBottom: `1px solid ${c.border}`,
+  },
+  tableRowEven: { background: 'rgba(0,0,0,0.015)' },
+  tableRowOn:   { background: '#e8faf5' },
+  tdCheck: { width: 24, padding: '9px 6px 9px 0', fontSize: 11, fontWeight: 700, color: c.mintD, textAlign: 'center' },
+  tdWord:  { padding: '9px 6px', fontSize: 13, fontWeight: 600, color: c.ink, direction: 'ltr', width: '38%' },
+  tdTrans: { padding: '9px 6px', fontSize: 12, color: c.ink2, direction: 'rtl' },
+  tdLevel: { padding: '9px 6px 9px 0', width: 36, textAlign: 'right' },
+  levelBadge: {
+    fontSize: 9, fontWeight: 700, padding: '2px 5px',
+    borderRadius: 4, border: '1px solid', display: 'inline-block',
+  },
 
   /* Random */
   centeredCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 32, gap: 20 },
