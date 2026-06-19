@@ -251,29 +251,38 @@ function HubView({
         <span style={s.modeChevron}>←</span>
       </button>
 
-      {/* Past sessions */}
-      {monthKeys.length > 0 && (
-        <div style={s.historySection}>
-          <div style={s.historyTitle}>מילים שתרגלת</div>
-          {monthKeys.map(month => (
-            <div key={month} style={{ marginBottom: 16 }}>
-              <div style={s.monthLabel}>{month}</div>
-              <div style={s.sessionRow}>
-                {grouped[month].map(session => (
-                  <button
-                    key={session.id}
-                    style={s.sessionCard}
-                    onClick={() => onLoadSession(session)}
-                  >
-                    <div style={s.sessionWord}>{session.words[0]?.word ?? '—'}</div>
-                    <div style={s.sessionCount}>{session.words.length} מילים</div>
-                  </button>
-                ))}
-              </div>
+      {/* Past sessions — always visible */}
+      <div style={s.historySection}>
+        <div style={s.historyTitle}>מילים שתרגלת</div>
+        {monthKeys.length === 0 ? (
+          <p style={{ color: c.ink3, fontSize: 12, textAlign: 'center', padding: '14px 0 4px' }}>
+            לאחר שתתרגל יופיעו כאן קבוצות המילים שלך
+          </p>
+        ) : monthKeys.map(month => (
+          <div key={month} style={{ marginBottom: 16 }}>
+            <div style={s.monthLabel}>{month}</div>
+            <div style={s.sessionRow}>
+              {grouped[month].map(session => (
+                <button
+                  key={session.id}
+                  style={s.sessionCard}
+                  onClick={() => onLoadSession(session)}
+                >
+                  <div style={s.sessionWords}>
+                    {session.words.slice(0, 3).map(w => (
+                      <span key={w.word ?? w} style={s.sessionWordChip}>{w.word ?? w}</span>
+                    ))}
+                    {session.words.length > 3 && (
+                      <span style={s.sessionMore}>+{session.words.length - 3}</span>
+                    )}
+                  </div>
+                  <div style={s.sessionCount}>{session.words.length} מילים</div>
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -951,11 +960,16 @@ const s = {
   },
   sessionCard: {
     background: c.white, border: `1px solid ${c.border}`,
-    borderRadius: 12, padding: '12px 14px',
+    borderRadius: 12, padding: '10px 12px',
     cursor: 'pointer', fontFamily: 'inherit',
-    textAlign: 'right', flexShrink: 0, minWidth: 100,
+    textAlign: 'right', flexShrink: 0, minWidth: 120, maxWidth: 160,
   },
-  sessionWord: { fontSize: 14, fontWeight: 600, color: c.ink, marginBottom: 4, direction: 'ltr' },
+  sessionWords: { display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 6, direction: 'ltr' },
+  sessionWordChip: {
+    background: c.surface, borderRadius: 5,
+    padding: '2px 6px', fontSize: 11, fontWeight: 600, color: c.ink,
+  },
+  sessionMore: { fontSize: 11, color: c.ink3, alignSelf: 'center' },
   sessionCount: { fontSize: 11, color: c.ink3 },
 
   /* hub mode cards */

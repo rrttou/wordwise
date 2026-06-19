@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 import { useSession } from './SessionContext'
 
 export const MIN_PICK = 4
 const VALID_LEVELS = new Set(['A1','A2','B1','B2','C1','C2'])
+const ALL_LETTERS   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
 const c = {
   ink:'#1a1a2e', ink2:'#4a4a6a', ink3:'#8888aa',
@@ -114,13 +115,16 @@ export default function WordPicker({ user, onDone, onCancel }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Tab: שלי — user's saved words
+   Tab: שלי — user's saved words (level navbar + alpha navbar)
 ═══════════════════════════════════════════════════════════════════ */
 function MineTab({ user, selectedKeys, onToggle, onReplace }) {
-  const [words,   setWords]   = useState([])
-  const [filter,  setFilter]  = useState('')
-  const [subTab,  setSubTab]  = useState('all') // 'all' | 'wrong'
-  const [loading, setLoading] = useState(true)
+  const [words,        setWords]   = useState([])
+  const [activeLevel,  setLevel]   = useState('all')
+  const [activeLetter, setLetter]  = useState(null)
+  const [subTab,       setSubTab]  = useState('all')
+  const [loading,      setLoading] = useState(true)
+  const letterNavRef    = useRef(null)
+  const activeLetterRef = useRef(null)
 
   useEffect(() => {
     supabase.from('user_words')
@@ -131,49 +135,117 @@ function MineTab({ user, selectedKeys, onToggle, onReplace }) {
       .then(({ data }) => { setWords(data ?? []); setLoading(false) })
   }, [])
 
-  const base     = subTab === 'wrong' ? words.filter(w => (w.wrong_count ?? 0) > 0) : words
-  const filtered = filter
-    ? base.filter(w => w.word.toLowerCase().includes(filter.toLowerCase()))
-    : base
+  const base         = subTab === 'wrong' ? words.filter(w => (w.wrong_count ?? 0) > 0) : words
+  const levelFiltered = activeLevel === 'all' ? base : base.filter(w => w.level === activeLevel)
+  const availableLetters = new Set(levelFiltered.map(w => w.word[0]?.toUpperCase()).filter(Boolean))
+  const displayedWords = activeLetter
+    ? levelFiltered.filter(w => w.word[0]?.toUpperCase() === activeLetter)
+    : levelFiltered
+
+  // Reset letter when level or sub-tab changes
+  useEffect(() => {
+    const b = subTab === 'wrong' ? words.filter(w => (w.wrong_count ?? 0) > 0) : words
+    const lf = activeLevel === 'all' ? b : b.filter(w => w.level === activeLevel)
+    setLetter(lf[0]?.word[0]?.toUpperCase() ?? null)
+  }, [activeLevel, subTab, words])
+
+  // Auto-scroll active letter into view
+  useEffect(() => {
+    if (activeLetterRef.current && letterNavRef.current) {
+      activeLetterRef.current.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+    }
+  }, [activeLetter])
+
+  const levelCounts = {}
+  Object.keys(LEVEL_META).forEach(l => { levelCounts[l] = base.filter(w => w.level === l).length })
 
   if (loading) return <CenteredMsg>טוען מילים...</CenteredMsg>
   if (!words.length) return <CenteredMsg>אין מילים — הוסף מילים בלשונית ״מילים״</CenteredMsg>
 
+  const activeColor = activeLevel !== 'all' ? (LEVEL_META[activeLevel]?.color ?? c.mint) : c.mint
+
   return (
     <div>
-      {/* Sub-filter */}
-      <div style={s.subTabs}>
-        <button style={{ ...s.subTab, ...(subTab === 'all'   ? s.subTabOn : {}) }} onClick={() => setSubTab('all')}>
-          הכל ({words.length})
-        </button>
-        <button style={{ ...s.subTab, ...(subTab === 'wrong' ? s.subTabOn : {}) }} onClick={() => setSubTab('wrong')}>
-          שגויות ({words.filter(w => (w.wrong_count ?? 0) > 0).length})
-        </button>
+      {/* Sub-tabs + actions */}
+      <div style={ms.topRow}>
+        <div style={{ display: 'flex', gap: 5 }}>
+          <button style={{ ...s.subTab, ...(subTab === 'all'   ? s.subTabOn : {}) }} onClick={() => setSubTab('all')}>
+            הכל ({words.length})
+          </button>
+          <button style={{ ...s.subTab, ...(subTab === 'wrong' ? s.subTabOn : {}) }} onClick={() => setSubTab('wrong')}>
+            שגויות ({words.filter(w => (w.wrong_count ?? 0) > 0).length})
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button style={s.actionBtn} onClick={() => onReplace(displayedWords)}>בחר הכל</button>
+          <button style={s.actionBtn} onClick={() => onReplace([])}>נקה</button>
+        </div>
       </div>
 
-      {/* Search + actions */}
-      <div style={s.searchRow}>
-        <input
-          style={s.searchInput}
-          placeholder="🔍 חיפוש..."
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          dir="ltr"
-        />
-        <button style={s.actionBtn} onClick={() => onReplace(filtered)}>בחר הכל</button>
-        <button style={s.actionBtn} onClick={() => onReplace([])}>נקה</button>
+      {/* Level navbar */}
+      <div style={ms.levelNav}>
+        <button
+          style={{ ...ms.levelBtn, ...(activeLevel === 'all' ? ms.levelBtnAll : {}) }}
+          onClick={() => setLevel('all')}
+        >
+          <span>הכל</span>
+          <span style={ms.levelCount}>{base.length}</span>
+        </button>
+        {Object.keys(LEVEL_META).map(level => {
+          const col = LEVEL_META[level]?.color ?? c.mint
+          const on  = activeLevel === level
+          return (
+            <button
+              key={level}
+              style={{
+                ...ms.levelBtn,
+                ...(on  ? { background: col + '18', color: col, borderColor: col, fontWeight: 700 } : {}),
+                ...(levelCounts[level] === 0 ? { opacity: 0.3 } : {}),
+              }}
+              onClick={() => levelCounts[level] > 0 && setLevel(level)}
+              disabled={levelCounts[level] === 0}
+            >
+              <span>{level}</span>
+              <span style={ms.levelCount}>{levelCounts[level]}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Alpha navbar */}
+      <div style={ms.letterNav} ref={letterNavRef}>
+        {ALL_LETTERS.map(letter => {
+          const has = availableLetters.has(letter)
+          const on  = letter === activeLetter
+          return (
+            <button
+              key={letter}
+              ref={on ? activeLetterRef : null}
+              disabled={!has}
+              style={{
+                ...ms.letterBtn,
+                ...(on  ? { background: activeColor + '18', color: activeColor, borderColor: activeColor, fontWeight: 700 } : {}),
+                ...(!has ? ms.letterBtnOff : {}),
+              }}
+              onClick={() => has && setLetter(letter)}
+            >
+              {letter}
+            </button>
+          )
+        })}
       </div>
 
       {/* Word chips */}
-      {!filtered.length
-        ? <CenteredMsg>אין תוצאות</CenteredMsg>
-        : (
+      <div style={{ marginTop: 10 }}>
+        {displayedWords.length === 0 ? (
+          <CenteredMsg>אין מילים {activeLetter ? `באות ${activeLetter}` : 'בסינון הנוכחי'}</CenteredMsg>
+        ) : (
           <div style={s.wordGrid}>
-            {filtered.map(w => {
+            {displayedWords.map(w => {
               const on = selectedKeys.has(wordKey(w))
               return (
                 <button
-                  key={w.id}
+                  key={wordKey(w)}
                   style={{ ...s.wordChip, ...(on ? s.wordChipOn : {}) }}
                   onClick={() => onToggle(w)}
                 >
@@ -184,8 +256,8 @@ function MineTab({ user, selectedKeys, onToggle, onReplace }) {
               )
             })}
           </div>
-        )
-      }
+        )}
+      </div>
     </div>
   )
 }
@@ -482,6 +554,49 @@ function CenteredMsg({ children }) {
       {children}
     </div>
   )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MineTab-specific styles
+═══════════════════════════════════════════════════════════════════ */
+const ms = {
+  topRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 8, flexWrap: 'wrap', gap: 6,
+  },
+  levelNav: {
+    display: 'flex', gap: 5, marginBottom: 0,
+    overflowX: 'auto', scrollbarWidth: 'none',
+    paddingBottom: 6,
+  },
+  levelBtn: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    background: '#fff', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: 9,
+    padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 12, fontWeight: 500, color: '#8888aa', flexShrink: 0,
+    lineHeight: 1.2,
+  },
+  levelBtnAll: {
+    background: '#e8faf5', borderColor: '#2ec4a0', color: '#1a9e80', fontWeight: 700,
+  },
+  levelCount: { fontSize: 10, fontWeight: 400, opacity: 0.7, marginTop: 2 },
+
+  letterNav: {
+    display: 'flex', gap: 3,
+    overflowX: 'auto', scrollbarWidth: 'none',
+    borderTop: '1px solid rgba(0,0,0,0.08)', borderBottom: '1px solid rgba(0,0,0,0.08)',
+    background: '#fff', padding: '6px 0', marginBottom: 0,
+  },
+  letterBtn: {
+    background: 'transparent', border: '1px solid rgba(0,0,0,0.08)',
+    borderRadius: 6, padding: '4px 0',
+    width: 26, minWidth: 26, fontSize: 11, fontWeight: 500,
+    color: '#4a4a6a', cursor: 'pointer', textAlign: 'center',
+    fontFamily: 'inherit', flexShrink: 0, transition: 'all 0.12s',
+  },
+  letterBtnOff: {
+    color: '#8888aa', opacity: 0.25, cursor: 'default', borderColor: 'transparent',
+  },
 }
 
 /* ═══════════════════════════════════════════════════════════════════
