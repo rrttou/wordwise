@@ -92,7 +92,6 @@ export default function WordPicker({ user, onDone, onCancel }) {
             .from('user_words')
             .select('id, word, translation, level, wrong_count')
             .eq('user_id', user.id)
-            .not('translation', 'is', null)
             .order('word')
             .range(from, from + PAGE - 1)
           if (!data?.length) break
@@ -117,12 +116,15 @@ export default function WordPicker({ user, onDone, onCancel }) {
   }, [source])
 
   // Derived: words filtered by level + wrongOnly
+  // For 'random', only translated words are eligible
   const levelFiltered = activeLevel === 'all'
     ? allWords
     : allWords.filter(w => w.level === activeLevel)
   const basePool = (source === 'mine' && wrongOnly)
-    ? levelFiltered.filter(w => (w.wrong_count ?? 0) > 0)
-    : levelFiltered
+    ? levelFiltered.filter(w => (w.wrong_count ?? 0) > 0 && w.translation)
+    : source === 'random'
+      ? levelFiltered.filter(w => w.translation)
+      : levelFiltered
   const availableLetters = new Set(basePool.map(w => w.word[0]?.toUpperCase()).filter(Boolean))
   const searchTrim = search.trim().toLowerCase()
   const shownWords = searchTrim
@@ -165,6 +167,7 @@ export default function WordPicker({ user, onDone, onCancel }) {
   const canStart     = selected.length >= MIN_PICK
 
   function toggleWord(w) {
+    if (!w.translation) return   // can't practice without translation
     const key = wordKey(w)
     setSelected(prev =>
       selectedKeys.has(key) ? prev.filter(p => wordKey(p) !== key) : [...prev, w]
@@ -341,7 +344,7 @@ export default function WordPicker({ user, onDone, onCancel }) {
               >
                 שגויות
               </button>
-              <button style={s.actionBtn} onClick={() => setSelected(shownWords)}>✓ הכל</button>
+              <button style={s.actionBtn} onClick={() => setSelected(shownWords.filter(w => w.translation))}>✓ הכל</button>
               <button style={s.actionBtn} onClick={() => setSelected([])}>נקה</button>
             </div>
             <WordTable words={shownWords} selectedKeys={selectedKeys} onToggle={toggleWord}
@@ -459,16 +462,24 @@ function WordTable({ words, selectedKeys, onToggle, loading, letter, search }) {
     <table style={s.table}>
       <tbody>
         {words.map((w, i) => {
-          const on = selectedKeys.has(wordKey(w))
+          const on          = selectedKeys.has(wordKey(w))
+          const noTranslate = !w.translation
           return (
             <tr
               key={wordKey(w)}
-              style={{ ...s.tableRow, ...(on ? s.tableRowOn : {}), ...(i % 2 === 0 ? s.tableRowEven : {}) }}
+              style={{
+                ...s.tableRow,
+                ...(on ? s.tableRowOn : {}),
+                ...(i % 2 === 0 && !on ? s.tableRowEven : {}),
+                ...(noTranslate ? { opacity: 0.38, cursor: 'default' } : {}),
+              }}
               onClick={() => onToggle(w)}
             >
               <td style={s.tdCheck}>{on ? '✓' : ''}</td>
               <td style={s.tdWord}>{w.word}</td>
-              <td style={s.tdTrans}>{w.translation}</td>
+              <td style={{ ...s.tdTrans, ...(noTranslate ? { color: c.ink3, fontStyle: 'italic', fontSize: 11 } : {}) }}>
+                {w.translation ?? 'אין תרגום'}
+              </td>
               <td style={s.tdLevel}>
                 {w.level && (
                   <span style={{ ...s.levelBadge, color: LEVEL_COLOR[w.level] ?? '#8888aa', borderColor: (LEVEL_COLOR[w.level] ?? '#8888aa') + '44' }}>
