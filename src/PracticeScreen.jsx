@@ -148,25 +148,6 @@ function HubView({
         <p style={s.pageSub}>{hasCurrent ? 'יש קבוצת מילים פעילה' : 'בחר מצב תרגול'}</p>
       </div>
 
-      {/* Current session */}
-      {hasCurrent && (
-        <div style={s.currentCard}>
-          <div style={s.currentLabel}>קבוצה פעילה</div>
-          <div style={s.currentWords}>
-            {currentWords.slice(0, 5).map(w => (
-              <span key={w.word} style={s.currentChip}>{w.word}</span>
-            ))}
-            {currentWords.length > 5 && (
-              <span style={s.currentMore}>+{currentWords.length - 5}</span>
-            )}
-          </div>
-          <div style={s.currentFooter}>
-            <span style={s.currentCount}>{currentWords.length} מילים</span>
-            <button style={s.changeBtn} onClick={() => onPickWords('quiz')}>שנה מילים</button>
-          </div>
-        </div>
-      )}
-
       {/* Word count stepper */}
       <div style={s.countRow}>
         <span style={s.countLabel}>כמות מילים לתרגול:</span>
@@ -238,7 +219,10 @@ function HubView({
                 <button
                   key={month}
                   style={{ ...s.monthBtn, ...(activeMonth === month ? s.monthBtnOn : {}) }}
-                  onClick={() => { setActiveMonth(month); setExpandedId(null) }}
+                  onClick={() => {
+                    setExpandedId(null)
+                    setActiveMonth(activeMonth === month ? null : month)
+                  }}
                 >
                   {month}
                 </button>
@@ -246,8 +230,9 @@ function HubView({
             </div>
 
             {/* Sessions for active month */}
-            <div style={s.sessionList}>
+            {activeMonth && <div style={s.sessionList}>
               {(grouped[activeMonth] ?? []).map(session => {
+
                 const firstWord  = session.words[0]?.word ?? session.words[0] ?? '—'
                 const isExpanded = expandedId === session.id
                 return (
@@ -285,7 +270,7 @@ function HubView({
                   </div>
                 )
               })}
-            </div>
+            </div>}
           </>
         )}
       </div>
