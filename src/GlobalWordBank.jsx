@@ -5,81 +5,76 @@ const c = {
   ink:'#1a1a2e', ink2:'#4a4a6a', ink3:'#8888aa',
   cream:'#faf8f4', surface:'#f0ede6', white:'#ffffff',
   mint:'#2ec4a0', mintL:'#e8faf5', mintD:'#1a9e80',
-  gold:'#e8a020', goldL:'#fff8e8',
   rose:'#e05070',
-  sky:'#4080f0',  skyL:'#eef4ff',
+  sky:'#4080f0',
   border:'rgba(0,0,0,0.08)',
 }
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 const ALL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
-const LEVEL_STYLE = {
-  A1: { bg: '#e8faf5', color: '#1a9e80', border: '#2ec4a0' },
-  A2: { bg: '#e8faf5', color: '#1a9e80', border: '#2ec4a0' },
-  B1: { bg: '#eef4ff', color: '#4080f0', border: '#4080f0' },
-  B2: { bg: '#eef4ff', color: '#4080f0', border: '#4080f0' },
-  C1: { bg: '#f3e8ff', color: '#7c3aed', border: '#c4b5fd' },
-  C2: { bg: '#f3e8ff', color: '#7c3aed', border: '#c4b5fd' },
+const LEVEL_COLOR = {
+  A1:'#2ec4a0', A2:'#2ec4a0',
+  B1:'#4080f0', B2:'#4080f0',
+  C1:'#7c3aed', C2:'#7c3aed',
 }
 
 export default function GlobalWordBank() {
-  const [activeLevel,  setActiveLevel]  = useState('B1')
+  const [allWords,     setAllWords]     = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [activeLevel,  setActiveLevel]  = useState('all')
   const [activeLetter, setActiveLetter] = useState(null)
-  const [levelWords,   setLevelWords]   = useState([])
-  const [loading,      setLoading]      = useState(false)
-  const [levelCounts,  setLevelCounts]  = useState({})
-  const letterNavRef = useRef(null)
+  const [search,       setSearch]       = useState('')
+
+  const letterNavRef    = useRef(null)
   const activeLetterRef = useRef(null)
 
   useEffect(() => {
-    fetchAllCounts()
+    async function load() {
+      setLoading(true)
+      const { data } = await supabase
+        .from('global_words')
+        .select('word, translation, level')
+        .not('translation', 'is', null)
+        .order('word')
+        .limit(3000)
+      setAllWords(data ?? [])
+      setLoading(false)
+    }
+    load()
   }, [])
 
-  useEffect(() => { fetchLevel(activeLevel) }, [activeLevel])
-
-  async function fetchAllCounts() {
-    const results = await Promise.all(
-      LEVELS.map(level =>
-        supabase
-          .from('global_words')
-          .select('*', { count: 'exact', head: true })
-          .eq('level', level)
-          .not('translation', 'is', null)
-      )
-    )
-    const counts = {}
-    LEVELS.forEach((level, i) => { counts[level] = results[i].count ?? 0 })
-    setLevelCounts(counts)
-  }
-
+  // Reset letter when level changes
   useEffect(() => {
-    if (activeLetterRef.current && letterNavRef.current) {
+    const pool = activeLevel === 'all' ? allWords : allWords.filter(w => w.level === activeLevel)
+    setActiveLetter(pool[0]?.word[0]?.toUpperCase() ?? null)
+    setSearch('')
+  }, [activeLevel, allWords])
+
+  // Auto-scroll active letter
+  useEffect(() => {
+    if (activeLetterRef.current && letterNavRef.current)
       activeLetterRef.current.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
-    }
   }, [activeLetter])
 
-  async function fetchLevel(level) {
-    setLoading(true)
-    setActiveLetter(null)
-    const { data } = await supabase
-      .from('global_words')
-      .select('word, translation')
-      .eq('level', level)
-      .not('translation', 'is', null)
-      .order('word')
-    const words = data || []
-    setLevelWords(words)
-    if (words.length) setActiveLetter(words[0].word[0].toUpperCase())
-    setLoading(false)
-  }
+  // Level counts (client-side)
+  const levelCounts = {}
+  LEVELS.forEach(l => { levelCounts[l] = allWords.filter(w => w.level === l).length })
 
-  const availableLetters = new Set(levelWords.map(w => w.word[0].toUpperCase()))
-  const displayedWords   = activeLetter
-    ? levelWords.filter(w => w.word[0].toUpperCase() === activeLetter)
-    : levelWords
+  // Filtering
+  const levelFiltered = activeLevel === 'all' ? allWords : allWords.filter(w => w.level === activeLevel)
+  const searchTrim    = search.trim().toLowerCase()
+  const availableLetters = new Set(levelFiltered.map(w => w.word[0]?.toUpperCase()).filter(Boolean))
+  const displayed = searchTrim
+    ? levelFiltered.filter(w =>
+        w.word.toLowerCase().includes(searchTrim) ||
+        (w.translation ?? '').toLowerCase().includes(searchTrim)
+      )
+    : activeLetter
+      ? levelFiltered.filter(w => w.word[0]?.toUpperCase() === activeLetter)
+      : levelFiltered
 
-  const ls = LEVEL_STYLE[activeLevel]
+  const showAlphaNav = !searchTrim
 
   return (
     <div style={s.page}>
@@ -92,102 +87,114 @@ export default function GlobalWordBank() {
 
       {/* Level navbar */}
       <div style={s.levelNav}>
+        <button
+          style={{ ...s.levelBtn, ...(activeLevel === 'all' ? s.levelBtnAll : {}) }}
+          onClick={() => setActiveLevel('all')}
+        >
+          <span>הכל</span>
+          <span style={s.levelCount}>{loading ? '·' : allWords.length}</span>
+        </button>
         {LEVELS.map(level => {
-          const lst = LEVEL_STYLE[level]
-          const on  = level === activeLevel
+          const col = LEVEL_COLOR[level]
+          const on  = activeLevel === level
+          const cnt = levelCounts[level] ?? 0
           return (
             <button
               key={level}
               style={{
                 ...s.levelBtn,
-                ...(on ? {
-                  background: lst.bg,
-                  color: lst.color,
-                  borderColor: lst.border,
-                  fontWeight: 700,
-                  transform: 'translateY(-1px)',
-                  boxShadow: `0 2px 8px ${lst.border}44`,
-                } : {}),
+                ...(on ? { background: col + '18', color: col, borderColor: col, fontWeight: 700 } : {}),
+                ...(cnt === 0 ? { opacity: 0.28 } : {}),
               }}
-              onClick={() => setActiveLevel(level)}
+              onClick={() => cnt > 0 && setActiveLevel(level)}
+              disabled={cnt === 0}
             >
               <span>{level}</span>
-              {levelCounts[level] != null && (
-                <span style={{
-                  display: 'block',
-                  fontSize: 10,
-                  fontWeight: 400,
-                  opacity: 0.7,
-                  marginTop: 1,
-                  lineHeight: 1,
-                }}>
-                  {levelCounts[level]}
-                </span>
-              )}
+              <span style={s.levelCount}>{loading ? '·' : cnt}</span>
             </button>
           )
         })}
       </div>
 
       {/* Letter navbar */}
-      <div style={s.letterNav} ref={letterNavRef}>
-        {ALL_LETTERS.map(letter => {
-          const has = availableLetters.has(letter)
-          const on  = letter === activeLetter
-          return (
-            <button
-              key={letter}
-              ref={on ? activeLetterRef : null}
-              disabled={!has}
-              style={{
-                ...s.letterBtn,
-                ...(on  ? { background: ls.bg, color: ls.color, borderColor: ls.border, fontWeight: 700 } : {}),
-                ...(!has ? s.letterBtnOff : {}),
-              }}
-              onClick={() => has && setActiveLetter(letter)}
-            >
-              {letter}
-            </button>
-          )
-        })}
+      {showAlphaNav && (
+        <div style={s.letterNav} ref={letterNavRef}>
+          {ALL_LETTERS.map(letter => {
+            const has = availableLetters.has(letter)
+            const on  = letter === activeLetter
+            const col = activeLevel !== 'all' ? (LEVEL_COLOR[activeLevel] ?? c.mint) : c.mint
+            return (
+              <button
+                key={letter}
+                ref={on ? activeLetterRef : null}
+                disabled={!has}
+                style={{
+                  ...s.letterBtn,
+                  ...(on  ? { background: col + '18', color: col, borderColor: col, fontWeight: 700 } : {}),
+                  ...(!has ? s.letterBtnOff : {}),
+                }}
+                onClick={() => has && setActiveLetter(letter)}
+              >
+                {letter}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Search + stats bar */}
+      <div style={s.filterBar}>
+        <div style={s.searchWrap}>
+          <span style={s.searchIcon}>🔍</span>
+          <input
+            style={s.searchInput}
+            placeholder="חיפוש מילה..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            dir="auto"
+          />
+          {search && <button style={s.clearSearch} onClick={() => setSearch('')}>✕</button>}
+        </div>
+        <span style={s.countBadge}>
+          {loading ? '...' : `${displayed.length} מילים`}
+        </span>
       </div>
 
-      {/* Stats bar */}
-      <div style={s.statsBar}>
-        <span style={{ ...s.levelPill, background: ls.bg, color: ls.color, borderColor: ls.border }}>
-          {activeLevel}
-        </span>
-        <span style={s.wordCount}>
-          {loading ? '...' : `${displayedWords.length} מילים`}
-          {!loading && activeLetter && levelWords.length > 0 && (
-            <span style={{ color: c.ink3, fontWeight: 400 }}> ({levelWords.length} ברמה)</span>
-          )}
-        </span>
-      </div>
-
-      {/* Word list */}
+      {/* Table */}
       {loading ? (
         <div style={s.center}>
           <div style={s.spinner} />
           <p style={{ color: c.ink3, fontSize: 13, marginTop: 12 }}>טוען מילים...</p>
         </div>
-      ) : levelWords.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <div style={s.center}>
-          <span style={{ fontSize: 40 }}>📚</span>
-          <p style={{ color: c.ink3, fontSize: 13, marginTop: 10 }}>אין מילים מתורגמות ברמה זו עדיין</p>
-        </div>
-      ) : displayedWords.length === 0 ? (
-        <div style={s.center}>
-          <p style={{ color: c.ink3, fontSize: 13 }}>אין מילים באות {activeLetter}</p>
+          <p style={{ color: c.ink3, fontSize: 13 }}>
+            {searchTrim ? `לא נמצאו תוצאות עבור "${search}"` : 'אין מילים'}
+          </p>
         </div>
       ) : (
         <div style={s.tableWrap}>
-          {displayedWords.map(({ word, translation }, i) => (
-            <div key={word} style={{ ...s.row, ...(i % 2 === 0 ? {} : s.rowAlt) }}>
-              <span style={s.word}>{word}</span>
-              <span style={s.translation}>{translation}</span>
-            </div>
-          ))}
+          <table style={s.table}>
+            <tbody>
+              {displayed.map(({ word, translation, level }, i) => (
+                <tr key={word} style={{ ...s.tableRow, ...(i % 2 !== 0 ? s.tableRowAlt : {}) }}>
+                  <td style={s.tdWord}>{word}</td>
+                  <td style={s.tdTrans}>{translation}</td>
+                  <td style={s.tdLevel}>
+                    {level && (
+                      <span style={{
+                        ...s.levelBadge,
+                        color: LEVEL_COLOR[level] ?? c.ink3,
+                        borderColor: (LEVEL_COLOR[level] ?? c.ink3) + '55',
+                      }}>
+                        {level}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -195,164 +202,80 @@ export default function GlobalWordBank() {
 }
 
 const s = {
-  page: {
-    maxWidth: 480,
-    margin: '0 auto',
-    padding: '20px 0 32px',
-    direction: 'rtl',
-    minHeight: '60vh',
-  },
-  header: {
-    textAlign: 'center',
-    padding: '0 16px 16px',
-  },
-  title: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 24,
-    fontWeight: 600,
-    color: c.ink,
-    margin: '0 0 4px',
-  },
-  sub: {
-    fontSize: 12,
-    color: c.ink3,
-    margin: 0,
-    letterSpacing: '0.5px',
-  },
+  page: { maxWidth: 480, margin: '0 auto', padding: '20px 0 32px', direction: 'rtl' },
+
+  header: { textAlign: 'center', padding: '0 16px 16px' },
+  title: { fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 600, color: c.ink, margin: '0 0 4px' },
+  sub:   { fontSize: 12, color: c.ink3, margin: 0, letterSpacing: '0.5px' },
 
   /* Level navbar */
   levelNav: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: 6,
-    padding: '0 16px 14px',
-    flexWrap: 'wrap',
+    display: 'flex', gap: 5, padding: '0 16px 12px',
+    overflowX: 'auto', scrollbarWidth: 'none',
   },
   levelBtn: {
-    background: c.white,
-    border: `1.5px solid ${c.border}`,
-    borderRadius: 10,
-    padding: '8px 16px',
-    fontSize: 14,
-    fontWeight: 500,
-    color: c.ink3,
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    fontFamily: 'inherit',
-    minWidth: 52,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    lineHeight: 1.3,
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    background: c.white, border: `1.5px solid ${c.border}`, borderRadius: 9,
+    padding: '6px 13px', cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 13, fontWeight: 500, color: c.ink3, flexShrink: 0, lineHeight: 1.2,
   },
+  levelBtnAll: { background: c.mintL, borderColor: c.mint, color: c.mintD, fontWeight: 700 },
+  levelCount:  { fontSize: 10, fontWeight: 400, opacity: 0.65, marginTop: 2 },
 
   /* Letter navbar */
   letterNav: {
-    display: 'flex',
-    overflowX: 'auto',
-    gap: 4,
-    padding: '8px 16px 10px',
-    scrollbarWidth: 'none',
-    borderTop: `1px solid ${c.border}`,
-    borderBottom: `1px solid ${c.border}`,
+    display: 'flex', gap: 3, padding: '6px 16px 8px',
+    overflowX: 'auto', scrollbarWidth: 'none',
+    borderTop: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}`,
     background: c.white,
-    marginBottom: 0,
   },
   letterBtn: {
-    background: 'transparent',
-    border: `1px solid ${c.border}`,
-    borderRadius: 7,
-    padding: '5px 0',
-    width: 30,
-    minWidth: 30,
-    fontSize: 12,
-    fontWeight: 500,
-    color: c.ink2,
-    cursor: 'pointer',
-    textAlign: 'center',
-    transition: 'all 0.12s',
-    fontFamily: 'inherit',
-    flexShrink: 0,
+    background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 6,
+    padding: '4px 0', width: 26, minWidth: 26, fontSize: 11, fontWeight: 500,
+    color: c.ink2, cursor: 'pointer', textAlign: 'center',
+    fontFamily: 'inherit', flexShrink: 0, transition: 'all 0.12s',
   },
-  letterBtnOff: {
-    color: c.ink3,
-    opacity: 0.3,
-    cursor: 'default',
-    borderColor: 'transparent',
+  letterBtnOff: { color: c.ink3, opacity: 0.2, cursor: 'default', borderColor: 'transparent' },
+
+  /* Filter / search bar */
+  filterBar: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '8px 16px', borderBottom: `1px solid ${c.border}`,
+  },
+  searchWrap: {
+    display: 'flex', alignItems: 'center', flex: 1,
+    background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8,
+    padding: '0 8px', gap: 4,
+  },
+  searchIcon:  { fontSize: 12, flexShrink: 0, opacity: 0.5 },
+  searchInput: {
+    background: 'transparent', border: 'none', outline: 'none',
+    fontSize: 13, color: c.ink, fontFamily: 'inherit',
+    flex: 1, padding: '7px 0',
+  },
+  clearSearch: {
+    background: 'transparent', border: 'none', color: c.ink3,
+    cursor: 'pointer', fontSize: 12, padding: '2px 0', flexShrink: 0,
+  },
+  countBadge: { fontSize: 12, color: c.ink3, whiteSpace: 'nowrap', flexShrink: 0 },
+
+  /* Table */
+  tableWrap: { margin: '0 16px', borderRadius: 12, border: `1px solid ${c.border}`, overflow: 'hidden', background: c.white },
+  table:     { width: '100%', borderCollapse: 'collapse' },
+  tableRow:  { borderBottom: `1px solid ${c.border}` },
+  tableRowAlt: { background: c.surface },
+  tdWord:  { padding: '10px 14px', fontSize: 14, fontWeight: 600, color: c.ink, direction: 'ltr', width: '38%' },
+  tdTrans: { padding: '10px 8px', fontSize: 13, color: c.ink2, direction: 'rtl' },
+  tdLevel: { padding: '10px 12px 10px 0', width: 36, textAlign: 'right' },
+  levelBadge: {
+    fontSize: 9, fontWeight: 700, padding: '2px 5px',
+    borderRadius: 4, border: '1px solid', display: 'inline-block',
   },
 
-  /* Stats bar */
-  statsBar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '10px 16px 8px',
-    direction: 'ltr',
-  },
-  levelPill: {
-    display: 'inline-block',
-    padding: '3px 10px',
-    borderRadius: 20,
-    border: '1.5px solid',
-    fontSize: 12,
-    fontWeight: 700,
-  },
-  wordCount: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: c.ink2,
-    direction: 'rtl',
-  },
-
-  /* Word rows */
-  tableWrap: {
-    margin: '0 16px',
-    borderRadius: 12,
-    border: `1px solid ${c.border}`,
-    overflow: 'hidden',
-    background: c.white,
-  },
-  row: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '11px 16px',
-    gap: 12,
-    borderBottom: `1px solid ${c.border}`,
-  },
-  rowAlt: {
-    background: c.surface,
-  },
-  word: {
-    fontFamily: 'inherit',
-    fontSize: 14,
-    fontWeight: 600,
-    color: c.ink,
-    direction: 'ltr',
-    minWidth: 120,
-  },
-  translation: {
-    fontSize: 13,
-    color: c.ink2,
-    direction: 'rtl',
-    textAlign: 'right',
-    flex: 1,
-  },
-
-  center: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '60px 16px',
-    gap: 8,
-  },
+  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 16px', gap: 8 },
   spinner: {
-    width: 32,
-    height: 32,
-    border: `3px solid ${c.mintL}`,
-    borderTop: `3px solid ${c.mint}`,
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
+    width: 32, height: 32,
+    border: `3px solid ${c.mintL}`, borderTop: `3px solid ${c.mint}`,
+    borderRadius: '50%', animation: 'spin 0.8s linear infinite',
   },
 }
