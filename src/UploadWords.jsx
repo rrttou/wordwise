@@ -71,14 +71,24 @@ export default function UploadWords({ user }) {
 
   async function loadBank() {
     setLoadingBank(true)
-    const { data, error } = await supabase
-      .from('user_words')
-      .select('word, source, translation, level, created_at')
-      .order('created_at', { ascending: false })
+    const PAGE = 1000
+    let all = [], from = 0, loadError = null
+    while (true) {
+      const { data, error } = await supabase
+        .from('user_words')
+        .select('word, source, translation, level, created_at')
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE - 1)
+      if (error) { loadError = error; break }
+      if (!data?.length) break
+      all = [...all, ...data]
+      if (data.length < PAGE) break
+      from += PAGE
+    }
     setLoadingBank(false)
-    if (error) {
-      if (error.code === '42P01' || error.message.includes('does not exist')) setSetup(true)
-    } else setSaved(data || [])
+    if (loadError) {
+      if (loadError.code === '42P01' || loadError.message.includes('does not exist')) setSetup(true)
+    } else setSaved(all)
   }
 
   async function processFile(file) {

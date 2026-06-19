@@ -85,13 +85,21 @@ export default function WordPicker({ user, onDone, onCancel }) {
           from += PAGE
         }
       } else {
-        const { data } = await supabase
-          .from('user_words')
-          .select('id, word, translation, level, wrong_count')
-          .eq('user_id', user.id)
-          .not('translation', 'is', null)
-          .order('word')
-        words = data ?? []
+        const PAGE = 1000
+        let from = 0
+        while (true) {
+          const { data } = await supabase
+            .from('user_words')
+            .select('id, word, translation, level, wrong_count')
+            .eq('user_id', user.id)
+            .not('translation', 'is', null)
+            .order('word')
+            .range(from, from + PAGE - 1)
+          if (!data?.length) break
+          words = [...words, ...data]
+          if (data.length < PAGE) break
+          from += PAGE
+        }
       }
       setAllWords(words)
       setLoading(false)
