@@ -242,8 +242,12 @@ export default function UploadWords({ user }) {
 
   const activeSrc = SOURCES.find(s => s.id === src)
   const LEVEL_ORDER = { A1: 1, A2: 2, B1: 3, B2: 4, C1: 5, C2: 6 }
-  const filteredBank = filter
-    ? saved.filter(w => w.word.toLowerCase().includes(filter.toLowerCase()))
+  const filterTrim = filter.trim().toLowerCase()
+  const filteredBank = filterTrim
+    ? saved.filter(w =>
+        w.word.toLowerCase().includes(filterTrim) ||
+        (w.translation ?? '').toLowerCase().includes(filterTrim)
+      )
     : saved
   const displayedBank = [...filteredBank].sort((a, b) => {
     if (sortBy === 'alpha') return a.word.localeCompare(b.word)
@@ -392,14 +396,18 @@ export default function UploadWords({ user }) {
               </button>
             )}
 
-            <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' }}>
-              <input
-                style={{ ...s.filterInput, flex:1, minWidth:120 }}
-                placeholder="🔍 חיפוש מילה..."
-                value={filter}
-                onChange={e => setFilter(e.target.value)}
-                dir="ltr"
-              />
+            <div style={{ display:'flex', gap:6, marginBottom:12, alignItems:'center' }}>
+              <div style={s.searchWrap}>
+                <span style={s.searchIcon}>🔍</span>
+                <input
+                  style={s.searchInput}
+                  placeholder="חיפוש מילה או תרגום..."
+                  value={filter}
+                  onChange={e => setFilter(e.target.value)}
+                  dir="auto"
+                />
+                {filter && <button style={s.clearSearch} onClick={() => setFilter('')}>✕</button>}
+              </div>
               <div style={s.sortBtns}>
                 {[['alpha','א-ב'],['level','רמה'],['date','תאריך']].map(([key,label]) => (
                   <button key={key} style={{ ...s.sortBtn, ...(sortBy===key ? s.sortBtnOn : {}) }} onClick={() => setSortBy(key)}>{label}</button>
@@ -765,16 +773,20 @@ const s = {
     fontWeight: 500,
     border: `1px solid ${c.mint}`,
   },
-  filterInput: {
-    background: c.white,
-    border: `1px solid ${c.border}`,
-    borderRadius: 8,
-    padding: '7px 12px',
-    color: c.ink,
-    fontSize: 13,
-    outline: 'none',
-    width: 140,
-    fontFamily: 'inherit',
+  searchWrap: {
+    display: 'flex', alignItems: 'center', flex: 1,
+    background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8,
+    padding: '0 8px', gap: 4, minWidth: 0,
+  },
+  searchIcon:  { fontSize: 12, flexShrink: 0, opacity: 0.5 },
+  searchInput: {
+    background: 'transparent', border: 'none', outline: 'none',
+    fontSize: 13, color: c.ink, fontFamily: 'inherit',
+    flex: 1, padding: '7px 0', minWidth: 0,
+  },
+  clearSearch: {
+    background: 'transparent', border: 'none', color: c.ink3,
+    cursor: 'pointer', fontSize: 12, padding: '2px 0', flexShrink: 0,
   },
   emptyBank: {
     display: 'flex',
