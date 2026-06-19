@@ -4,25 +4,21 @@ import { useSession } from './SessionContext'
 
 export const MIN_PICK = 4
 const VALID_LEVELS = new Set(['A1','A2','B1','B2','C1','C2'])
-const ALL_LETTERS   = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+const LEVELS       = ['A1','A2','B1','B2','C1','C2']
+const ALL_LETTERS  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+const LEVEL_COLOR = {
+  A1:'#2ec4a0', A2:'#2ec4a0',
+  B1:'#4080f0', B2:'#4080f0',
+  C1:'#7c3aed', C2:'#7c3aed',
+}
 
 const c = {
   ink:'#1a1a2e', ink2:'#4a4a6a', ink3:'#8888aa',
-  cream:'#faf8f4', surface:'#f0ede6', white:'#ffffff',
+  surface:'#f0ede6', white:'#ffffff',
   mint:'#2ec4a0', mintL:'#e8faf5', mintD:'#1a9e80',
-  gold:'#e8a020', goldL:'#fff8e8',
   rose:'#e05070', roseL:'#fef0f3',
-  sky:'#4080f0',  skyL:'#eef4ff',
   border:'rgba(0,0,0,0.08)',
-}
-
-const LEVEL_META = {
-  A1: { label: 'מתחיל',      color: '#2ec4a0' },
-  A2: { label: 'בסיסי',      color: '#2ec4a0' },
-  B1: { label: 'בינוני',     color: '#4080f0' },
-  B2: { label: 'עצמאי',      color: '#4080f0' },
-  C1: { label: 'מתקדם',      color: '#7c3aed' },
-  C2: { label: 'שליטה מלאה', color: '#7c3aed' },
 }
 
 function shuffle(arr) {
@@ -41,13 +37,103 @@ function wordKey(w) { return w.id ?? w.word }
 ═══════════════════════════════════════════════════════════════════ */
 export default function WordPicker({ user, onDone, onCancel }) {
   const { wordCount, setWordCount } = useSession()
-  const [tab,      setTab]      = useState('mine')
-  const [selected, setSelected] = useState([])
 
+  // Navigation state
+  const [source,       setSource]   = useState('mine')
+  const [activeLevel,  setLevel]    = useState('all')
+  const [activeLetter, setLetter]   = useState(null)
+
+  // Data
+  const [allWords,  setAllWords]  = useState([])
+  const [selected,  setSelected]  = useState([])
+  const [loading,   setLoading]   = useState(false)
+  const [wrongOnly, setWrongOnly] = useState(false)
+
+  // Manual mode
+  const [manualInput,   setManualInput]   = useState('')
+  const [manualLoading, setManualLoading] = useState(false)
+  const [manualStatus,  setManualStatus]  = useState('')
+  const [manualError,   setManualError]   = useState('')
+  const [manualFailed,  setManualFailed]  = useState([])
+
+  const letterNavRef    = useRef(null)
+  const activeLetterRef = useRef(null)
+
+  // 'user' covers both mine+random; 'global' covers global; 'manual' is separate
+  const dataSource = source === 'global' ? 'global' : source === 'manual' ? 'manual' : 'user'
+
+  // Load words when underlying data source changes
+  useEffect(() => {
+    if (dataSource === 'manual') { setAllWords([]); return }
+    async function load() {
+      setLoading(true)
+      const q = dataSource === 'global'
+        ? supabase.from('global_words')
+            .select('word, translation, level')
+            .not('translation', 'is', null)
+            .order('word')
+            .limit(3000)
+        : supabase.from('user_words')
+            .select('id, word, translation, level, wrong_count')
+            .eq('user_id', user.id)
+            .not('translation', 'is', null)
+            .order('word')
+      const { data } = await q
+      setAllWords(data ?? [])
+      setLoading(false)
+    }
+    load()
+  }, [dataSource])
+
+  // Reset UI when source changes
+  useEffect(() => {
+    setSelected([])
+    setLevel('all')
+    setLetter(null)
+    setWrongOnly(false)
+  }, [source])
+
+  // Derived: words filtered by level + wrongOnly
+  const levelFiltered = activeLevel === 'all'
+    ? allWords
+    : allWords.filter(w => w.level === activeLevel)
+  const basePool = (source === 'mine' && wrongOnly)
+    ? levelFiltered.filter(w => (w.wrong_count ?? 0) > 0)
+    : levelFiltered
+  const availableLetters = new Set(basePool.map(w => w.word[0]?.toUpperCase()).filter(Boolean))
+  const shownWords = activeLetter
+    ? basePool.filter(w => w.word[0]?.toUpperCase() === activeLetter)
+    : basePool
+
+  // Level counts (computed client-side from allWords)
+  const levelCounts = {}
+  LEVELS.forEach(l => {
+    const pool = source === 'mine' && wrongOnly
+      ? allWords.filter(w => w.level === l && (w.wrong_count ?? 0) > 0)
+      : allWords.filter(w => w.level === l)
+    levelCounts[l] = pool.length
+  })
+  const allCount = source === 'mine' && wrongOnly
+    ? allWords.filter(w => (w.wrong_count ?? 0) > 0).length
+    : allWords.length
+
+  // Reset active letter when pool changes
+  useEffect(() => {
+    const lf = activeLevel === 'all' ? allWords : allWords.filter(w => w.level === activeLevel)
+    const pool = source === 'mine' && wrongOnly ? lf.filter(w => (w.wrong_count ?? 0) > 0) : lf
+    setLetter(pool[0]?.word[0]?.toUpperCase() ?? null)
+  }, [activeLevel, wrongOnly, allWords, source])
+
+  // Auto-scroll active letter into view
+  useEffect(() => {
+    if (activeLetterRef.current && letterNavRef.current) {
+      activeLetterRef.current.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+    }
+  }, [activeLetter])
+
+  // Selection helpers
   const selectedKeys = new Set(selected.map(wordKey))
   const canStart     = selected.length >= MIN_PICK
-
-  function replaceWith(words) { setSelected(words) }
 
   function toggleWord(w) {
     const key = wordKey(w)
@@ -56,13 +142,65 @@ export default function WordPicker({ user, onDone, onCancel }) {
     )
   }
 
-  const TABS = [
-    { id: 'mine',   icon: '📚', label: 'שלי'    },
-    { id: 'random', icon: '🎲', label: 'אקראי'  },
-    { id: 'levels', icon: '🎯', label: 'רמות'   },
-    { id: 'manual', icon: '✏️', label: 'ידני'   },
-    { id: 'global', icon: '🌐', label: 'גלובלי' },
-  ]
+  // Random: pick immediately and call onDone
+  function handleRandom() {
+    const picked = shuffle(basePool).slice(0, Math.min(wordCount, basePool.length))
+    if (picked.length >= MIN_PICK) onDone(picked)
+  }
+
+  // Manual: enrich + save, then call onDone
+  async function handleManual() {
+    const typed = [...new Set(
+      manualInput.split(/[\n,]+/).map(w => w.trim().toLowerCase()).filter(Boolean)
+    )]
+    if (!typed.length) return
+    setManualLoading(true); setManualFailed([]); setManualError(''); setManualStatus('מחפש מילים...')
+
+    const { data: existing } = await supabase
+      .from('user_words').select('id, word, translation, level, wrong_count')
+      .eq('user_id', user.id).in('word', typed).not('translation', 'is', null)
+
+    const existingSet = new Set((existing ?? []).map(w => w.word))
+    const newWords = typed.filter(w => !existingSet.has(w))
+    let resultWords = [...(existing ?? [])]
+
+    if (newWords.length > 0) {
+      setManualStatus(`מתרגם ${newWords.length} מילים...`)
+      const { data: enriched, error: fnErr } = await supabase.functions.invoke('enrich-words', {
+        body: { words: newWords }
+      })
+      if (!fnErr && Array.isArray(enriched) && enriched.length) {
+        const rows = enriched.filter(e => e.word && e.translation).map(e => ({
+          user_id: user.id,
+          word: e.word.toLowerCase(),
+          translation: e.translation,
+          level: VALID_LEVELS.has(e.level) ? e.level : null,
+          source: 'manual',
+        }))
+        if (rows.length) {
+          const { data: upserted } = await supabase
+            .from('user_words').upsert(rows, { onConflict: 'user_id,word' })
+            .select('id, word, translation, level')
+          if (upserted?.length) resultWords = [...resultWords, ...upserted]
+        }
+        const enrichedSet = new Set(enriched.map(e => e.word?.toLowerCase()).filter(Boolean))
+        setManualFailed(newWords.filter(w => !enrichedSet.has(w)))
+      } else {
+        setManualFailed(newWords)
+      }
+    }
+
+    setManualLoading(false); setManualStatus('')
+    if (resultWords.length < MIN_PICK) {
+      setManualError(`נמצאו רק ${resultWords.length} מילים — צריך לפחות ${MIN_PICK}`)
+      return
+    }
+    onDone(resultWords)
+  }
+
+  const showLevelNav = source !== 'manual'
+  const showAlphaNav = source === 'mine' || source === 'global'
+  const activeColor  = activeLevel !== 'all' ? (LEVEL_COLOR[activeLevel] ?? c.mint) : c.mint
 
   return (
     <div style={s.page}>
@@ -74,27 +212,171 @@ export default function WordPicker({ user, onDone, onCancel }) {
         <span style={s.selCount}>{selected.length > 0 ? `${selected.length} ✓` : ''}</span>
       </div>
 
-      {/* ── Tab bar ── */}
-      <div style={s.tabBar}>
-        {TABS.map(t => (
+      {/* ── 1st navbar: Source ── */}
+      <div style={s.sourceNav}>
+        {[
+          { id: 'mine',   label: 'שלי'    },
+          { id: 'random', label: 'אקראי'  },
+          { id: 'global', label: 'גלובלי' },
+          { id: 'manual', label: 'ידני'   },
+        ].map(src => (
           <button
-            key={t.id}
-            style={{ ...s.tab, ...(tab === t.id ? s.tabOn : {}) }}
-            onClick={() => setTab(t.id)}
+            key={src.id}
+            style={{ ...s.srcBtn, ...(source === src.id ? s.srcBtnOn : {}) }}
+            onClick={() => setSource(src.id)}
           >
-            <span style={{ fontSize: 14 }}>{t.icon}</span>
-            <span>{t.label}</span>
+            {src.label}
           </button>
         ))}
       </div>
 
-      {/* ── Tab content ── */}
+      {/* ── 2nd navbar: Level ── */}
+      {showLevelNav && (
+        <div style={s.levelNav}>
+          <button
+            style={{ ...s.levelBtn, ...(activeLevel === 'all' ? s.levelBtnAll : {}) }}
+            onClick={() => setLevel('all')}
+          >
+            <span>הכל</span>
+            <span style={s.levelCount}>{loading ? '·' : allCount}</span>
+          </button>
+          {LEVELS.map(level => {
+            const col = LEVEL_COLOR[level] ?? c.mint
+            const on  = activeLevel === level
+            const cnt = levelCounts[level]
+            return (
+              <button
+                key={level}
+                style={{
+                  ...s.levelBtn,
+                  ...(on  ? { background: col + '18', color: col, borderColor: col, fontWeight: 700 } : {}),
+                  ...(cnt === 0 ? { opacity: 0.28 } : {}),
+                }}
+                onClick={() => cnt > 0 && setLevel(level)}
+                disabled={cnt === 0}
+              >
+                <span>{level}</span>
+                <span style={s.levelCount}>{loading ? '·' : cnt}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── 3rd navbar: Alpha ── */}
+      {showAlphaNav && (
+        <div style={s.letterNav} ref={letterNavRef}>
+          {ALL_LETTERS.map(letter => {
+            const has = availableLetters.has(letter)
+            const on  = letter === activeLetter
+            return (
+              <button
+                key={letter}
+                ref={on ? activeLetterRef : null}
+                disabled={!has}
+                style={{
+                  ...s.letterBtn,
+                  ...(on  ? { background: activeColor + '18', color: activeColor, borderColor: activeColor, fontWeight: 700 } : {}),
+                  ...(!has ? s.letterBtnOff : {}),
+                }}
+                onClick={() => has && setLetter(letter)}
+              >
+                {letter}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Content ── */}
       <div style={s.content}>
-        {tab === 'mine'   && <MineTab   user={user} selectedKeys={selectedKeys} onToggle={toggleWord} onReplace={replaceWith} />}
-        {tab === 'random' && <RandomTab user={user} wordCount={wordCount} setWordCount={setWordCount} onPick={replaceWith} />}
-        {tab === 'levels' && <LevelsTab user={user} wordCount={wordCount} onPick={replaceWith} />}
-        {tab === 'manual' && <ManualTab user={user} onPick={replaceWith} />}
-        {tab === 'global' && <GlobalTab selectedKeys={selectedKeys} onToggle={toggleWord} onReplace={replaceWith} />}
+
+        {/* שלי — browse & toggle */}
+        {source === 'mine' && (
+          <>
+            <div style={s.actionRow}>
+              <button
+                style={{ ...s.filterBtn, ...(wrongOnly ? s.filterBtnOn : {}) }}
+                onClick={() => setWrongOnly(v => !v)}
+              >
+                שגויות בלבד
+              </button>
+              <span style={{ flex: 1 }} />
+              <button style={s.actionBtn} onClick={() => setSelected(shownWords)}>בחר הכל</button>
+              <button style={s.actionBtn} onClick={() => setSelected([])}>נקה</button>
+            </div>
+            <WordGrid words={shownWords} selectedKeys={selectedKeys} onToggle={toggleWord}
+              loading={loading} letter={activeLetter} />
+          </>
+        )}
+
+        {/* אקראי — count picker */}
+        {source === 'random' && (
+          <div style={s.centeredCol}>
+            <p style={s.hintText}>
+              {loading ? '...' :
+                `${basePool.length} מילים זמינות${activeLevel !== 'all' ? ` ברמה ${activeLevel}` : ''}`}
+            </p>
+            <div style={s.stepper}>
+              <button style={s.stepBtn} onClick={() => setWordCount(Math.max(MIN_PICK, wordCount - 2))}>−</button>
+              <span style={s.stepVal}>{wordCount}</span>
+              <button style={s.stepBtn} onClick={() => setWordCount(Math.min(30, wordCount + 2))}>+</button>
+            </div>
+            <button
+              style={{ ...s.bigBtn, opacity: basePool.length >= MIN_PICK && !loading ? 1 : 0.45 }}
+              onClick={handleRandom}
+              disabled={basePool.length < MIN_PICK || loading}
+            >
+              {loading ? '...' : `✦ בחר ${Math.min(wordCount, basePool.length)} מילים אקראיות`}
+            </button>
+            {!loading && basePool.length < MIN_PICK && (
+              <p style={{ color: c.rose, fontSize: 12, textAlign: 'center' }}>
+                אין מספיק מילים — נסה רמה אחרת
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* גלובלי — browse & toggle */}
+        {source === 'global' && (
+          <>
+            <div style={s.actionRow}>
+              <button style={s.actionBtn} onClick={() => setSelected(shownWords.slice(0, 20))}>בחר 20</button>
+              <button style={s.actionBtn} onClick={() => setSelected([])}>נקה</button>
+            </div>
+            <WordGrid words={shownWords} selectedKeys={selectedKeys} onToggle={toggleWord}
+              loading={loading} letter={activeLetter} />
+          </>
+        )}
+
+        {/* ידני — type & enrich */}
+        {source === 'manual' && (
+          <div style={s.manualCol}>
+            <p style={s.hintText}>הקלד מילים באנגלית — מופרדות בפסיק או שורה חדשה. מילים חדשות יתורגמו ויישמרו.</p>
+            <textarea
+              style={s.textarea}
+              placeholder="apple, universe, run, beautiful..."
+              value={manualInput}
+              onChange={e => { setManualInput(e.target.value); setManualFailed([]); setManualError('') }}
+              dir="ltr"
+              rows={6}
+            />
+            {manualFailed.length > 0 && (
+              <p style={{ color: c.ink3, fontSize: 12, direction: 'ltr', textAlign: 'left' }}>
+                לא זוהו: {manualFailed.join(', ')}
+              </p>
+            )}
+            {manualError && <p style={{ color: c.rose, fontSize: 13 }}>{manualError}</p>}
+            <button
+              style={{ ...s.bigBtn, opacity: manualInput.trim() && !manualLoading ? 1 : 0.45 }}
+              onClick={handleManual}
+              disabled={!manualInput.trim() || manualLoading}
+            >
+              {manualLoading ? (manualStatus || 'טוען...') : 'תרגם והוסף'}
+            </button>
+          </div>
+        )}
+
       </div>
 
       {/* ── Start bar ── */}
@@ -114,265 +396,23 @@ export default function WordPicker({ user, onDone, onCancel }) {
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   Tab: שלי — user's saved words (level navbar + alpha navbar)
-═══════════════════════════════════════════════════════════════════ */
-function MineTab({ user, selectedKeys, onToggle, onReplace }) {
-  const [words,        setWords]   = useState([])
-  const [activeLevel,  setLevel]   = useState('all')
-  const [activeLetter, setLetter]  = useState(null)
-  const [subTab,       setSubTab]  = useState('all')
-  const [loading,      setLoading] = useState(true)
-  const letterNavRef    = useRef(null)
-  const activeLetterRef = useRef(null)
-
-  useEffect(() => {
-    supabase.from('user_words')
-      .select('id, word, translation, level, wrong_count')
-      .eq('user_id', user.id)
-      .not('translation', 'is', null)
-      .order('word')
-      .then(({ data }) => { setWords(data ?? []); setLoading(false) })
-  }, [])
-
-  const base         = subTab === 'wrong' ? words.filter(w => (w.wrong_count ?? 0) > 0) : words
-  const levelFiltered = activeLevel === 'all' ? base : base.filter(w => w.level === activeLevel)
-  const availableLetters = new Set(levelFiltered.map(w => w.word[0]?.toUpperCase()).filter(Boolean))
-  const displayedWords = activeLetter
-    ? levelFiltered.filter(w => w.word[0]?.toUpperCase() === activeLetter)
-    : levelFiltered
-
-  // Reset letter when level or sub-tab changes
-  useEffect(() => {
-    const b = subTab === 'wrong' ? words.filter(w => (w.wrong_count ?? 0) > 0) : words
-    const lf = activeLevel === 'all' ? b : b.filter(w => w.level === activeLevel)
-    setLetter(lf[0]?.word[0]?.toUpperCase() ?? null)
-  }, [activeLevel, subTab, words])
-
-  // Auto-scroll active letter into view
-  useEffect(() => {
-    if (activeLetterRef.current && letterNavRef.current) {
-      activeLetterRef.current.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
-    }
-  }, [activeLetter])
-
-  const levelCounts = {}
-  Object.keys(LEVEL_META).forEach(l => { levelCounts[l] = base.filter(w => w.level === l).length })
-
-  if (loading) return <CenteredMsg>טוען מילים...</CenteredMsg>
-  if (!words.length) return <CenteredMsg>אין מילים — הוסף מילים בלשונית ״מילים״</CenteredMsg>
-
-  const activeColor = activeLevel !== 'all' ? (LEVEL_META[activeLevel]?.color ?? c.mint) : c.mint
-
+/* ─── Word grid ──────────────────────────────────────────────────── */
+function WordGrid({ words, selectedKeys, onToggle, loading, letter }) {
+  if (loading) return <CenteredMsg>טוען...</CenteredMsg>
+  if (!words.length) return <CenteredMsg>{letter ? `אין מילים באות ${letter}` : 'אין מילים'}</CenteredMsg>
   return (
-    <div>
-      {/* Sub-tabs + actions */}
-      <div style={ms.topRow}>
-        <div style={{ display: 'flex', gap: 5 }}>
-          <button style={{ ...s.subTab, ...(subTab === 'all'   ? s.subTabOn : {}) }} onClick={() => setSubTab('all')}>
-            הכל ({words.length})
-          </button>
-          <button style={{ ...s.subTab, ...(subTab === 'wrong' ? s.subTabOn : {}) }} onClick={() => setSubTab('wrong')}>
-            שגויות ({words.filter(w => (w.wrong_count ?? 0) > 0).length})
-          </button>
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button style={s.actionBtn} onClick={() => onReplace(displayedWords)}>בחר הכל</button>
-          <button style={s.actionBtn} onClick={() => onReplace([])}>נקה</button>
-        </div>
-      </div>
-
-      {/* Level navbar */}
-      <div style={ms.levelNav}>
-        <button
-          style={{ ...ms.levelBtn, ...(activeLevel === 'all' ? ms.levelBtnAll : {}) }}
-          onClick={() => setLevel('all')}
-        >
-          <span>הכל</span>
-          <span style={ms.levelCount}>{base.length}</span>
-        </button>
-        {Object.keys(LEVEL_META).map(level => {
-          const col = LEVEL_META[level]?.color ?? c.mint
-          const on  = activeLevel === level
-          return (
-            <button
-              key={level}
-              style={{
-                ...ms.levelBtn,
-                ...(on  ? { background: col + '18', color: col, borderColor: col, fontWeight: 700 } : {}),
-                ...(levelCounts[level] === 0 ? { opacity: 0.3 } : {}),
-              }}
-              onClick={() => levelCounts[level] > 0 && setLevel(level)}
-              disabled={levelCounts[level] === 0}
-            >
-              <span>{level}</span>
-              <span style={ms.levelCount}>{levelCounts[level]}</span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Alpha navbar */}
-      <div style={ms.letterNav} ref={letterNavRef}>
-        {ALL_LETTERS.map(letter => {
-          const has = availableLetters.has(letter)
-          const on  = letter === activeLetter
-          return (
-            <button
-              key={letter}
-              ref={on ? activeLetterRef : null}
-              disabled={!has}
-              style={{
-                ...ms.letterBtn,
-                ...(on  ? { background: activeColor + '18', color: activeColor, borderColor: activeColor, fontWeight: 700 } : {}),
-                ...(!has ? ms.letterBtnOff : {}),
-              }}
-              onClick={() => has && setLetter(letter)}
-            >
-              {letter}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Word chips */}
-      <div style={{ marginTop: 10 }}>
-        {displayedWords.length === 0 ? (
-          <CenteredMsg>אין מילים {activeLetter ? `באות ${activeLetter}` : 'בסינון הנוכחי'}</CenteredMsg>
-        ) : (
-          <div style={s.wordGrid}>
-            {displayedWords.map(w => {
-              const on = selectedKeys.has(wordKey(w))
-              return (
-                <button
-                  key={wordKey(w)}
-                  style={{ ...s.wordChip, ...(on ? s.wordChipOn : {}) }}
-                  onClick={() => onToggle(w)}
-                >
-                  <span style={s.chipWord}>{w.word}</span>
-                  <span style={s.chipTrans}>{w.translation}</span>
-                  {w.level && <span style={{ ...s.chipLevel, color: LEVEL_META[w.level]?.color ?? c.ink3 }}>{w.level}</span>}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   Tab: אקראי — random pick
-═══════════════════════════════════════════════════════════════════ */
-function RandomTab({ user, wordCount, setWordCount, onPick }) {
-  const [src,     setSrc]     = useState('own')
-  const [loading, setLoading] = useState(false)
-  const [msg,     setMsg]     = useState('')
-
-  async function handlePick() {
-    setLoading(true); setMsg('')
-    let pool = []
-    if (src === 'own') {
-      const { data } = await supabase
-        .from('user_words').select('id, word, translation, level')
-        .eq('user_id', user.id).not('translation', 'is', null)
-      pool = data ?? []
-    } else {
-      const { data } = await supabase
-        .from('global_words').select('word, translation, level')
-        .not('translation', 'is', null).limit(500)
-      pool = data ?? []
-    }
-    const picked = shuffle(pool).slice(0, Math.min(wordCount, pool.length))
-    setLoading(false)
-    if (picked.length < MIN_PICK) { setMsg(`רק ${picked.length} מילים זמינות — צריך לפחות ${MIN_PICK}`); return }
-    onPick(picked)
-  }
-
-  return (
-    <div style={s.centeredCol}>
-      {/* Source toggle */}
-      <div style={s.srcToggle}>
-        {[['own','📚 מהמאגר שלי'],['global','🌐 מאגר גלובלי']].map(([key, label]) => (
-          <button
-            key={key}
-            style={{ ...s.srcBtn, ...(src === key ? s.srcBtnOn : {}) }}
-            onClick={() => setSrc(key)}
-          >{label}</button>
-        ))}
-      </div>
-
-      {/* Count stepper */}
-      <div style={s.stepperRow}>
-        <span style={s.stepperLabel}>מספר מילים:</span>
-        <div style={s.stepper}>
-          <button style={s.stepBtn} onClick={() => setWordCount(Math.max(MIN_PICK, wordCount - 2))}>−</button>
-          <span style={s.stepVal}>{wordCount}</span>
-          <button style={s.stepBtn} onClick={() => setWordCount(Math.min(30, wordCount + 2))}>+</button>
-        </div>
-      </div>
-
-      <button style={s.bigBtn} onClick={handlePick} disabled={loading}>
-        {loading ? '...' : `✦ בחר ${wordCount} מילים אקראיות`}
-      </button>
-      {msg && <p style={{ color: c.rose, fontSize: 13, marginTop: 8 }}>{msg}</p>}
-      {!loading && <p style={{ color: c.ink3, fontSize: 12, marginTop: 12 }}>המילים יופיעו בבר הירוק למטה — לחץ ״התחל״</p>}
-    </div>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   Tab: רמות — by CEFR level
-═══════════════════════════════════════════════════════════════════ */
-function LevelsTab({ user, wordCount, onPick }) {
-  const [counts,  setCounts]  = useState({})
-  const [loading, setLoading] = useState(null) // level being loaded
-
-  useEffect(() => {
-    const levels = Object.keys(LEVEL_META)
-    Promise.all(levels.map(l =>
-      supabase.from('user_words')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id).eq('level', l)
-        .not('translation', 'is', null)
-    )).then(results => {
-      const c = {}
-      levels.forEach((l, i) => { c[l] = results[i].count ?? 0 })
-      setCounts(c)
-    })
-  }, [])
-
-  async function pickLevel(level) {
-    setLoading(level)
-    const { data } = await supabase
-      .from('user_words')
-      .select('id, word, translation, level')
-      .eq('user_id', user.id).eq('level', level)
-      .not('translation', 'is', null)
-    const words = shuffle(data ?? []).slice(0, wordCount)
-    setLoading(null)
-    if (words.length < MIN_PICK) return
-    onPick(words)
-  }
-
-  return (
-    <div style={s.levelGrid}>
-      {Object.entries(LEVEL_META).map(([level, { label, color }]) => {
-        const count = counts[level] ?? '...'
-        const hasEnough = (counts[level] ?? 0) >= MIN_PICK
+    <div style={s.wordGrid}>
+      {words.map(w => {
+        const on = selectedKeys.has(wordKey(w))
         return (
           <button
-            key={level}
-            style={{ ...s.levelCard, opacity: hasEnough ? 1 : 0.4, cursor: hasEnough ? 'pointer' : 'default' }}
-            onClick={() => hasEnough && pickLevel(level)}
-            disabled={!hasEnough || loading === level}
+            key={wordKey(w)}
+            style={{ ...s.wordChip, ...(on ? s.wordChipOn : {}) }}
+            onClick={() => onToggle(w)}
           >
-            <span style={{ ...s.levelCode, color }}>{level}</span>
-            <span style={s.levelLabel}>{label}</span>
-            <span style={s.levelCount}>
-              {loading === level ? '...' : `${count} מילים`}
-            </span>
+            <span style={s.chipWord}>{w.word}</span>
+            <span style={s.chipTrans}>{w.translation}</span>
+            {w.level && <span style={{ ...s.chipLevel, color: LEVEL_COLOR[w.level] ?? '#8888aa' }}>{w.level}</span>}
           </button>
         )
       })}
@@ -380,174 +420,6 @@ function LevelsTab({ user, wordCount, onPick }) {
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   Tab: ידני — type words manually
-═══════════════════════════════════════════════════════════════════ */
-function ManualTab({ user, onPick }) {
-  const [input,   setInput]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const [status,  setStatus]  = useState('')
-  const [failed,  setFailed]  = useState([])
-  const [error,   setError]   = useState('')
-
-  async function handleStart() {
-    const typed = [...new Set(
-      input.split(/[\n,]+/).map(w => w.trim().toLowerCase()).filter(Boolean)
-    )]
-    if (!typed.length) return
-    setLoading(true); setFailed([]); setError(''); setStatus('מחפש מילים...')
-
-    const { data: existing } = await supabase
-      .from('user_words').select('id, word, translation, level, wrong_count')
-      .eq('user_id', user.id).in('word', typed).not('translation', 'is', null)
-
-    const existingSet = new Set((existing ?? []).map(w => w.word))
-    const newWords    = typed.filter(w => !existingSet.has(w))
-    let allWords      = [...(existing ?? [])]
-
-    if (newWords.length > 0) {
-      setStatus(`מתרגם ${newWords.length} מילים חדשות...`)
-      const { data: enriched, error: fnErr } = await supabase.functions.invoke('enrich-words', {
-        body: { words: newWords }
-      })
-      if (!fnErr && Array.isArray(enriched) && enriched.length) {
-        const rows = enriched
-          .filter(e => e.word && e.translation)
-          .map(e => ({
-            user_id: user.id,
-            word: e.word.toLowerCase(),
-            translation: e.translation,
-            level: VALID_LEVELS.has(e.level) ? e.level : null,
-            source: 'manual',
-          }))
-        if (rows.length) {
-          const { data: upserted } = await supabase
-            .from('user_words').upsert(rows, { onConflict: 'user_id,word' })
-            .select('id, word, translation, level')
-          if (upserted?.length) allWords = [...allWords, ...upserted]
-        }
-        const enrichedSet = new Set(enriched.map(e => e.word?.toLowerCase()).filter(Boolean))
-        setFailed(newWords.filter(w => !enrichedSet.has(w)))
-      } else {
-        setFailed(newWords)
-      }
-    }
-
-    setLoading(false); setStatus('')
-    if (allWords.length < MIN_PICK) { setError(`נמצאו רק ${allWords.length} מילים — צריך לפחות ${MIN_PICK}`); return }
-    onPick(allWords)
-  }
-
-  return (
-    <div style={s.manualCol}>
-      <p style={s.manualHint}>הקלד מילים באנגלית — מופרדות בפסיק או שורה חדשה. מילים חדשות יתורגמו ויישמרו במאגר שלך.</p>
-      <textarea
-        style={s.textarea}
-        placeholder="apple, universe, run, beautiful..."
-        value={input}
-        onChange={e => { setInput(e.target.value); setFailed([]); setError('') }}
-        dir="ltr"
-        rows={5}
-      />
-      {failed.length > 0 && (
-        <p style={{ color: c.ink3, fontSize: 12, direction: 'ltr', textAlign: 'left' }}>
-          לא זוהו: {failed.join(', ')}
-        </p>
-      )}
-      {error && <p style={{ color: c.rose, fontSize: 13 }}>{error}</p>}
-      <button
-        style={{ ...s.bigBtn, opacity: input.trim() && !loading ? 1 : 0.45 }}
-        onClick={handleStart}
-        disabled={!input.trim() || loading}
-      >
-        {loading ? (status || 'טוען...') : 'תרגם והוסף'}
-      </button>
-    </div>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   Tab: גלובלי — global word bank
-═══════════════════════════════════════════════════════════════════ */
-const CEFR = ['A1','A2','B1','B2','C1','C2']
-
-function GlobalTab({ selectedKeys, onToggle, onReplace }) {
-  const [level,   setLevel]   = useState('B1')
-  const [words,   setWords]   = useState([])
-  const [filter,  setFilter]  = useState('')
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    setLoading(true); setFilter('')
-    supabase.from('global_words')
-      .select('word, translation, level')
-      .eq('level', level).not('translation', 'is', null)
-      .order('word')
-      .then(({ data }) => { setWords(data ?? []); setLoading(false) })
-  }, [level])
-
-  const filtered = filter
-    ? words.filter(w => w.word.toLowerCase().startsWith(filter.toLowerCase()))
-    : words
-
-  const color = LEVEL_META[level]?.color ?? c.mint
-
-  return (
-    <div>
-      {/* Level nav */}
-      <div style={s.globalLevelNav}>
-        {CEFR.map(lv => (
-          <button
-            key={lv}
-            style={{
-              ...s.globalLevelBtn,
-              ...(lv === level ? { background: LEVEL_META[lv].color, color: '#fff', borderColor: LEVEL_META[lv].color } : {})
-            }}
-            onClick={() => setLevel(lv)}
-          >{lv}</button>
-        ))}
-      </div>
-
-      <div style={s.searchRow}>
-        <input
-          style={s.searchInput}
-          placeholder="🔍 חיפוש..."
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          dir="ltr"
-        />
-        <button style={s.actionBtn} onClick={() => onReplace(filtered.slice(0, 20))}>בחר 20</button>
-        <button style={s.actionBtn} onClick={() => onReplace([])}>נקה</button>
-      </div>
-
-      {loading
-        ? <CenteredMsg>טוען...</CenteredMsg>
-        : (
-          <div style={s.wordGrid}>
-            {filtered.map(w => {
-              const key = w.word
-              const on  = selectedKeys.has(key)
-              return (
-                <button
-                  key={key}
-                  style={{ ...s.wordChip, ...(on ? { ...s.wordChipOn, borderColor: color } : {}) }}
-                  onClick={() => onToggle({ word: w.word, translation: w.translation, level: w.level })}
-                >
-                  <span style={s.chipWord}>{w.word}</span>
-                  <span style={s.chipTrans}>{w.translation}</span>
-                </button>
-              )
-            })}
-          </div>
-        )
-      }
-    </div>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   Helpers
-═══════════════════════════════════════════════════════════════════ */
 function CenteredMsg({ children }) {
   return (
     <div style={{ textAlign: 'center', padding: '40px 16px', color: c.ink3, fontSize: 13 }}>
@@ -557,93 +429,128 @@ function CenteredMsg({ children }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   MineTab-specific styles
-═══════════════════════════════════════════════════════════════════ */
-const ms = {
-  topRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 8, flexWrap: 'wrap', gap: 6,
-  },
-  levelNav: {
-    display: 'flex', gap: 5, marginBottom: 0,
-    overflowX: 'auto', scrollbarWidth: 'none',
-    paddingBottom: 6,
-  },
-  levelBtn: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    background: '#fff', border: '1.5px solid rgba(0,0,0,0.08)', borderRadius: 9,
-    padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit',
-    fontSize: 12, fontWeight: 500, color: '#8888aa', flexShrink: 0,
-    lineHeight: 1.2,
-  },
-  levelBtnAll: {
-    background: '#e8faf5', borderColor: '#2ec4a0', color: '#1a9e80', fontWeight: 700,
-  },
-  levelCount: { fontSize: 10, fontWeight: 400, opacity: 0.7, marginTop: 2 },
-
-  letterNav: {
-    display: 'flex', gap: 3,
-    overflowX: 'auto', scrollbarWidth: 'none',
-    borderTop: '1px solid rgba(0,0,0,0.08)', borderBottom: '1px solid rgba(0,0,0,0.08)',
-    background: '#fff', padding: '6px 0', marginBottom: 0,
-  },
-  letterBtn: {
-    background: 'transparent', border: '1px solid rgba(0,0,0,0.08)',
-    borderRadius: 6, padding: '4px 0',
-    width: 26, minWidth: 26, fontSize: 11, fontWeight: 500,
-    color: '#4a4a6a', cursor: 'pointer', textAlign: 'center',
-    fontFamily: 'inherit', flexShrink: 0, transition: 'all 0.12s',
-  },
-  letterBtnOff: {
-    color: '#8888aa', opacity: 0.25, cursor: 'default', borderColor: 'transparent',
-  },
-}
-
-/* ═══════════════════════════════════════════════════════════════════
    Styles
 ═══════════════════════════════════════════════════════════════════ */
 const s = {
   page: {
     maxWidth: 420, margin: '0 auto',
     display: 'flex', flexDirection: 'column',
-    height: 'calc(100vh - 146px)', // full height minus topbar + bottomnav
-    direction: 'rtl',
+    height: 'calc(100vh - 146px)', direction: 'rtl',
   },
 
+  /* Header */
   header: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '12px 16px', borderBottom: `1px solid ${c.border}`,
-    flexShrink: 0,
+    padding: '10px 16px', borderBottom: `1px solid ${c.border}`, flexShrink: 0,
   },
-  cancelBtn: { background: 'transparent', border: 'none', color: c.ink3, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', padding: 0 },
+  cancelBtn: {
+    background: 'transparent', border: 'none', color: c.ink3,
+    cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', padding: 0,
+  },
   headerTitle: { fontSize: 14, fontWeight: 600, color: c.ink },
   selCount: { fontSize: 13, fontWeight: 600, color: c.mintD, minWidth: 40, textAlign: 'left' },
 
-  tabBar: {
-    display: 'flex', overflowX: 'auto', scrollbarWidth: 'none',
-    gap: 4, padding: '8px 12px',
-    borderBottom: `1px solid ${c.border}`, background: c.white,
-    flexShrink: 0,
+  /* 1st navbar — source */
+  sourceNav: {
+    display: 'flex', gap: 4, padding: '7px 16px',
+    borderBottom: `1px solid ${c.border}`, background: c.white, flexShrink: 0,
+    overflowX: 'auto', scrollbarWidth: 'none',
   },
-  tab: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-    background: 'transparent', border: `1px solid ${c.border}`,
-    borderRadius: 9, padding: '6px 12px', cursor: 'pointer',
-    fontSize: 11, fontWeight: 500, color: c.ink3, whiteSpace: 'nowrap',
-    fontFamily: 'inherit', flexShrink: 0,
+  srcBtn: {
+    background: 'transparent', border: `1.5px solid ${c.border}`, borderRadius: 8,
+    padding: '6px 16px', fontSize: 13, fontWeight: 500, color: c.ink3,
+    cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
   },
-  tabOn: { background: c.mintL, borderColor: c.mint, color: c.mintD },
+  srcBtnOn: { background: c.mintL, borderColor: c.mint, color: c.mintD, fontWeight: 600 },
 
-  content: {
-    flex: 1, overflowY: 'auto', padding: '12px 16px',
+  /* 2nd navbar — level */
+  levelNav: {
+    display: 'flex', gap: 4, padding: '6px 16px',
+    overflowX: 'auto', scrollbarWidth: 'none',
+    borderBottom: `1px solid ${c.border}`, background: c.white, flexShrink: 0,
+  },
+  levelBtn: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    background: c.white, border: `1.5px solid ${c.border}`, borderRadius: 9,
+    padding: '5px 11px', cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 12, fontWeight: 500, color: c.ink3, flexShrink: 0, lineHeight: 1.2,
+  },
+  levelBtnAll: { background: c.mintL, borderColor: c.mint, color: c.mintD, fontWeight: 700 },
+  levelCount: { fontSize: 10, fontWeight: 400, opacity: 0.65, marginTop: 2 },
+
+  /* 3rd navbar — alpha */
+  letterNav: {
+    display: 'flex', gap: 3, padding: '6px 16px',
+    overflowX: 'auto', scrollbarWidth: 'none',
+    borderBottom: `1px solid ${c.border}`, background: c.white, flexShrink: 0,
+  },
+  letterBtn: {
+    background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 6,
+    padding: '4px 0', width: 26, minWidth: 26, fontSize: 11, fontWeight: 500,
+    color: c.ink2, cursor: 'pointer', textAlign: 'center',
+    fontFamily: 'inherit', flexShrink: 0, transition: 'all 0.12s',
+  },
+  letterBtnOff: { color: c.ink3, opacity: 0.2, cursor: 'default', borderColor: 'transparent' },
+
+  /* Content */
+  content: { flex: 1, overflowY: 'auto', padding: '10px 16px' },
+
+  /* Action row (above word grid) */
+  actionRow: {
+    display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center',
+  },
+  filterBtn: {
+    background: c.white, border: `1px solid ${c.border}`, borderRadius: 7,
+    padding: '5px 10px', fontSize: 11, color: c.ink3, cursor: 'pointer', fontFamily: 'inherit',
+  },
+  filterBtnOn: { background: c.roseL, borderColor: '#e05070', color: '#e05070' },
+  actionBtn: {
+    background: c.white, border: `1px solid ${c.border}`, borderRadius: 7,
+    padding: '5px 10px', fontSize: 11, color: c.ink3, cursor: 'pointer',
+    fontFamily: 'inherit', whiteSpace: 'nowrap',
   },
 
-  // Start bar
+  /* Word grid */
+  wordGrid: { display: 'flex', flexWrap: 'wrap', gap: 7 },
+  wordChip: {
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+    background: c.white, border: `1.5px solid ${c.border}`, borderRadius: 10,
+    padding: '7px 11px', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
+  },
+  wordChipOn: { background: c.mintL, borderColor: c.mint },
+  chipWord:  { fontSize: 13, fontWeight: 600, color: c.ink, direction: 'ltr' },
+  chipTrans: { fontSize: 10, color: c.ink3, marginTop: 2 },
+  chipLevel: { fontSize: 9, fontWeight: 600, marginTop: 1 },
+
+  /* Random */
+  centeredCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 32, gap: 20 },
+  hintText: { fontSize: 13, color: c.ink3 },
+  stepper: { display: 'flex', alignItems: 'center', gap: 14 },
+  stepBtn: {
+    background: c.surface, border: `1px solid ${c.border}`, borderRadius: 7,
+    width: 36, height: 36, cursor: 'pointer', fontSize: 22, color: c.ink2,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
+  },
+  stepVal: { fontSize: 24, fontWeight: 700, color: c.ink, minWidth: 38, textAlign: 'center' },
+  bigBtn: {
+    background: c.mint, color: '#fff', border: 'none',
+    borderRadius: 12, padding: '13px 28px', fontSize: 14, fontWeight: 600,
+    cursor: 'pointer', fontFamily: 'inherit',
+  },
+
+  /* Manual */
+  manualCol: { display: 'flex', flexDirection: 'column', gap: 12 },
+  textarea: {
+    background: c.surface, border: `1.5px solid ${c.border}`, borderRadius: 10,
+    padding: 12, color: c.ink, fontSize: 13, lineHeight: 1.7,
+    resize: 'vertical', outline: 'none', fontFamily: 'inherit',
+  },
+
+  /* Start bar */
   startBar: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '10px 16px', borderTop: `1px solid ${c.border}`,
-    background: c.white, gap: 10, flexShrink: 0,
-    transition: 'opacity 0.2s',
+    background: c.white, gap: 10, flexShrink: 0, transition: 'opacity 0.2s',
   },
   startPreview: { display: 'flex', gap: 5, flex: 1, overflow: 'hidden', alignItems: 'center' },
   startChip: {
@@ -657,90 +564,5 @@ const s = {
     borderRadius: 10, padding: '10px 16px',
     fontSize: 13, fontWeight: 600, cursor: 'pointer',
     fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0,
-  },
-
-  // Shared: sub-tabs
-  subTabs: { display: 'flex', gap: 6, marginBottom: 10 },
-  subTab: {
-    background: c.surface, border: `1px solid ${c.border}`, borderRadius: 7,
-    padding: '5px 12px', fontSize: 12, color: c.ink3, cursor: 'pointer', fontFamily: 'inherit',
-  },
-  subTabOn: { background: c.mintL, borderColor: c.mint, color: c.mintD, fontWeight: 500 },
-
-  // Search + actions
-  searchRow: { display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' },
-  searchInput: {
-    flex: 1, background: c.surface, border: `1px solid ${c.border}`,
-    borderRadius: 8, padding: '7px 10px', fontSize: 13, color: c.ink,
-    outline: 'none', fontFamily: 'inherit',
-  },
-  actionBtn: {
-    background: c.white, border: `1px solid ${c.border}`, borderRadius: 7,
-    padding: '5px 10px', fontSize: 11, color: c.ink3, cursor: 'pointer',
-    fontFamily: 'inherit', whiteSpace: 'nowrap',
-  },
-
-  // Word chips grid
-  wordGrid: { display: 'flex', flexWrap: 'wrap', gap: 7 },
-  wordChip: {
-    display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-    background: c.white, border: `1.5px solid ${c.border}`,
-    borderRadius: 10, padding: '7px 11px',
-    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
-  },
-  wordChipOn: { background: c.mintL, borderColor: c.mint },
-  chipWord:  { fontSize: 13, fontWeight: 600, color: c.ink, direction: 'ltr' },
-  chipTrans: { fontSize: 10, color: c.ink3, marginTop: 2 },
-  chipLevel: { fontSize: 9, fontWeight: 600, marginTop: 1 },
-
-  // Random tab
-  centeredCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 24, gap: 16 },
-  srcToggle: { display: 'flex', gap: 8 },
-  srcBtn: {
-    background: c.white, border: `1.5px solid ${c.border}`, borderRadius: 10,
-    padding: '10px 16px', fontSize: 13, color: c.ink2, cursor: 'pointer', fontFamily: 'inherit',
-  },
-  srcBtnOn: { background: c.mintL, borderColor: c.mint, color: c.mintD, fontWeight: 500 },
-  stepperRow: { display: 'flex', alignItems: 'center', gap: 12 },
-  stepperLabel: { fontSize: 13, color: c.ink3 },
-  stepper: { display: 'flex', alignItems: 'center', gap: 10 },
-  stepBtn: {
-    background: c.surface, border: `1px solid ${c.border}`, borderRadius: 7,
-    width: 32, height: 32, cursor: 'pointer', fontSize: 18, color: c.ink2,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
-  },
-  stepVal: { fontSize: 18, fontWeight: 700, color: c.ink, minWidth: 32, textAlign: 'center' },
-  bigBtn: {
-    background: c.mint, color: '#fff', border: 'none',
-    borderRadius: 12, padding: '13px 24px', fontSize: 14, fontWeight: 600,
-    cursor: 'pointer', fontFamily: 'inherit',
-  },
-
-  // Levels tab
-  levelGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
-  levelCard: {
-    background: c.white, border: `1px solid ${c.border}`, borderRadius: 14,
-    padding: '18px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-    fontFamily: 'inherit',
-  },
-  levelCode:  { fontSize: 26, fontWeight: 700 },
-  levelLabel: { fontSize: 12, color: c.ink3 },
-  levelCount: { fontSize: 11, color: c.ink3, marginTop: 2 },
-
-  // Manual tab
-  manualCol: { display: 'flex', flexDirection: 'column', gap: 12 },
-  manualHint: { fontSize: 12, color: c.ink3, lineHeight: 1.5 },
-  textarea: {
-    background: c.surface, border: `1.5px solid ${c.border}`, borderRadius: 10,
-    padding: 12, color: c.ink, fontSize: 13, lineHeight: 1.7,
-    resize: 'vertical', outline: 'none', fontFamily: 'inherit',
-  },
-
-  // Global tab
-  globalLevelNav: { display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' },
-  globalLevelBtn: {
-    background: c.white, border: `1.5px solid ${c.border}`, borderRadius: 8,
-    padding: '5px 12px', fontSize: 13, fontWeight: 500, color: c.ink3,
-    cursor: 'pointer', fontFamily: 'inherit',
   },
 }
