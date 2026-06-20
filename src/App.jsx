@@ -59,6 +59,7 @@ export default function App() {
   const [user,        setUser]        = useState(null)
   const [streak,      setStreak]      = useState(0)
   const [authLoading, setAuthLoading] = useState(true)
+  const [quickAdd,    setQuickAdd]    = useState(false)
 
   useEffect(() => {
     const timeout = setTimeout(() => setAuthLoading(false), 5000)
@@ -141,7 +142,7 @@ export default function App() {
           {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
           {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
           {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
-          {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} />}
+          {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} />}
           {isApp && tab === 'upload'    && <UploadWords user={user} />}
           {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
           {isApp && tab === 'wordbank'  && <GlobalWordBank />}
@@ -154,6 +155,9 @@ export default function App() {
         </main>
 
         {isApp && <BottomNav tab={tab} setTab={setTab} />}
+        {isApp && quickAdd && (
+          <QuickAddModal user={user} onClose={() => setQuickAdd(false)} />
+        )}
       </div>
     </SessionProvider>
   )
@@ -389,7 +393,7 @@ function ResetPasswordScreen({ onSuccess }) {
 }
 
 /* ─── Dashboard ──────────────────────────────────────────────────── */
-function DashboardScreen({ user, streak, onUpload }) {
+function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
   const [dailyWord, setDailyWord] = useState(null)
   const [stats,     setStats]     = useState({ total: 0, learned: 0, accuracy: null })
 
@@ -474,6 +478,11 @@ function DashboardScreen({ user, streak, onUpload }) {
         <StatCard val={streak}                                         lbl="ימים רצוף" />
       </div>
 
+      {/* Quick lookup */}
+      <button style={s.quickAddBtn} onClick={onQuickAdd}>
+        + חפש וצרף מילה
+      </button>
+
     </div>
   )
 }
@@ -534,6 +543,282 @@ function StatCard({ val, lbl }) {
     </div>
   )
 }
+
+/* ─── Quick Add Modal ────────────────────────────────────────────── */
+function QuickAddModal({ user, onClose }) {
+  const [word,        setWord]        = useState('')
+  const [result,      setResult]      = useState(null)  // { translation, level, fromGlobal }
+  const [searching,   setSearching]   = useState(false)
+  const [adding,      setAdding]      = useState(false)
+  const [added,       setAdded]       = useState(false)
+  const [error,       setError]       = useState('')
+
+  async function lookup() {
+    const w = word.trim().toLowerCase()
+    if (!w) return
+    setSearching(true); setResult(null); setAdded(false); setError('')
+
+    const { data } = await supabase
+      .from('global_words')
+      .select('translation, level')
+      .ilike('word', w)
+      .limit(1)
+      .single()
+
+    if (data?.translation) {
+      setResult({ translation: data.translation, level: data.level, fromGlobal: true })
+      setSearching(false)
+      return
+    }
+
+    // Not in global_words — fetch from AI
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-words`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ words: [w] }),
+        }
+      )
+      const json = await res.json()
+      const item = Array.isArray(json) ? json[0] : null
+      if (item?.translation) {
+        setResult({ translation: item.translation, level: item.level, fromGlobal: false })
+      } else {
+        setResult({ translation: null })
+      }
+    } catch {
+      setError('שגיאה בחיפוש התרגום')
+    }
+    setSearching(false)
+  }
+
+  async function addToVocab() {
+    const w = word.trim().toLowerCase()
+    if (!w) return
+    setAdding(true)
+    const VALID_LEVELS = new Set(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+    const { error: upsertErr } = await supabase
+      .from('user_words')
+      .upsert(
+        {
+          user_id: user.id,
+          word: w,
+          source: 'manual',
+          translation: result?.translation ?? null,
+          level: result?.level && VALID_LEVELS.has(result.level) ? result.level : null,
+        },
+        { onConflict: 'user_id,word' }
+      )
+    if (upsertErr) {
+      setError('שגיאה בהוספה: ' + upsertErr.message)
+    } else {
+      setAdded(true)
+    }
+    setAdding(false)
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter') lookup()
+  }
+
+  return (
+    <div
+      style={sq.overlay}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={sq.card}>
+        <div style={sq.header}>
+          <span style={sq.title}>חיפוש מילה</span>
+          <button style={sq.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={sq.row}>
+          <input
+            style={sq.input}
+            placeholder="הקלד מילה באנגלית..."
+            value={word}
+            onChange={e => { setWord(e.target.value); setResult(null); setAdded(false) }}
+            onKeyDown={handleKey}
+            dir="ltr"
+            autoFocus
+          />
+          <button
+            style={sq.searchBtn}
+            onClick={lookup}
+            disabled={!word.trim() || searching}
+          >
+            {searching ? '...' : 'חפש'}
+          </button>
+        </div>
+
+        {error && <p style={sq.errMsg}>{error}</p>}
+
+        {result && (
+          <div style={sq.resultBox}>
+            {result.translation ? (
+              <>
+                <div style={sq.wordLabel}>{word.trim().toLowerCase()}</div>
+                {result.level && <div style={sq.levelBadge}>{result.level}</div>}
+                <div style={sq.translation}>{result.translation}</div>
+                {added ? (
+                  <div style={sq.addedMsg}>✓ נוספה לרשימה שלך!</div>
+                ) : (
+                  <button style={sq.addBtn} onClick={addToVocab} disabled={adding}>
+                    {adding ? 'מוסיף...' : 'הוסף לרשימה שלי'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div style={sq.noResult}>לא נמצא תרגום למילה זו</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const sq = {
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.45)',
+    zIndex: 200,
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    padding: '0 0 24px',
+  },
+  card: {
+    background: '#fff',
+    borderRadius: 18,
+    padding: '20px 20px 24px',
+    width: '100%',
+    maxWidth: 420,
+    margin: '0 12px',
+    direction: 'rtl',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: 600,
+    color: '#1a1a2e',
+  },
+  closeBtn: {
+    background: 'transparent',
+    border: 'none',
+    fontSize: 18,
+    color: '#8888aa',
+    cursor: 'pointer',
+    padding: '0 4px',
+    lineHeight: 1,
+  },
+  row: {
+    display: 'flex',
+    gap: 8,
+    marginBottom: 12,
+  },
+  input: {
+    flex: 1,
+    background: '#f0ede6',
+    border: '1.5px solid rgba(0,0,0,0.08)',
+    borderRadius: 10,
+    padding: '12px 14px',
+    fontSize: 15,
+    color: '#1a1a2e',
+    outline: 'none',
+    fontFamily: 'inherit',
+  },
+  searchBtn: {
+    background: '#2ec4a0',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    padding: '12px 18px',
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    flexShrink: 0,
+  },
+  resultBox: {
+    background: '#f0ede6',
+    borderRadius: 12,
+    padding: '16px',
+    textAlign: 'center',
+    direction: 'rtl',
+  },
+  wordLabel: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 22,
+    fontWeight: 600,
+    color: '#1a1a2e',
+    marginBottom: 4,
+  },
+  levelBadge: {
+    display: 'inline-block',
+    background: '#e8faf5',
+    color: '#1a9e80',
+    border: '1px solid #b0ead8',
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 600,
+    padding: '2px 10px',
+    marginBottom: 10,
+    letterSpacing: '0.5px',
+  },
+  translation: {
+    fontSize: 18,
+    color: '#4a4a6a',
+    marginBottom: 16,
+    lineHeight: 1.4,
+  },
+  addBtn: {
+    background: '#2ec4a0',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    padding: '11px 24px',
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    width: '100%',
+  },
+  addedMsg: {
+    color: '#1a9e80',
+    fontSize: 15,
+    fontWeight: 500,
+    padding: '8px 0',
+  },
+  noResult: {
+    color: '#8888aa',
+    fontSize: 14,
+    padding: '8px 0',
+  },
+  errMsg: {
+    color: '#e05070',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+}
+
+/* ─── FAB ────────────────────────────────────────────────────────── */
 
 /* ─── Styles ─────────────────────────────────────────────────────── */
 const s = {
@@ -872,4 +1157,42 @@ const s = {
   },
   errMsg: { color: c.rose, fontSize: 12, textAlign: 'center' },
   okMsg:  { color: c.mintD, fontSize: 12, textAlign: 'center' },
+
+  quickAddBtn: {
+    width: '100%',
+    background: c.mintL,
+    border: `1.5px solid ${c.mint}`,
+    borderRadius: 12,
+    padding: '14px',
+    fontSize: 15,
+    fontWeight: 500,
+    color: c.mintD,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    marginBottom: 16,
+    direction: 'rtl',
+  },
+
+  fab: {
+    position: 'fixed',
+    bottom: 100,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: c.mint,
+    color: '#fff',
+    border: 'none',
+    borderRadius: '50%',
+    width: 52,
+    height: 52,
+    fontSize: 28,
+    lineHeight: '52px',
+    textAlign: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 4px 16px rgba(46,196,160,0.4)',
+    zIndex: 150,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+  },
 }
