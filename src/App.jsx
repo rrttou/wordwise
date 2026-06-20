@@ -145,7 +145,7 @@ export default function App() {
           {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} />}
           {isApp && tab === 'upload'    && <UploadWords user={user} />}
           {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
-          {isApp && tab === 'wordbank'  && <GlobalWordBank />}
+          {isApp && tab === 'wordbank'  && <GlobalWordBank user={user} />}
           {isApp && tab === 'profile'   && (
             <ProfileScreen
               user={user}
@@ -421,16 +421,23 @@ function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
   }
 
   async function fetchStats() {
-    const { data } = await supabase
-      .from('user_words')
-      .select('correct_streak, wrong_count')
-      .eq('user_id', user.id)
-      .not('translation', 'is', null)
-    if (!data) return
-    const total        = data.length
-    const learned      = data.filter(w => (w.correct_streak ?? 0) > 0).length
-    const totalCorrect = data.reduce((s, w) => s + (w.correct_streak ?? 0), 0)
-    const totalWrong   = data.reduce((s, w) => s + (w.wrong_count   ?? 0), 0)
+    const PAGE = 1000
+    let all = [], from = 0
+    while (true) {
+      const { data } = await supabase
+        .from('user_words')
+        .select('correct_streak, wrong_count')
+        .eq('user_id', user.id)
+        .range(from, from + PAGE - 1)
+      if (!data?.length) break
+      all = [...all, ...data]
+      if (data.length < PAGE) break
+      from += PAGE
+    }
+    const total        = all.length
+    const learned      = all.filter(w => (w.correct_streak ?? 0) > 0).length
+    const totalCorrect = all.reduce((s, w) => s + (w.correct_streak ?? 0), 0)
+    const totalWrong   = all.reduce((s, w) => s + (w.wrong_count   ?? 0), 0)
     const accuracy     = totalCorrect + totalWrong > 0
       ? Math.round(totalCorrect / (totalCorrect + totalWrong) * 100)
       : null

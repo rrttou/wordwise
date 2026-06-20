@@ -19,7 +19,40 @@ const LEVEL_COLOR = {
   C1:'#7c3aed', C2:'#7c3aed',
 }
 
-export default function GlobalWordBank() {
+function getLevelStyle(level) {
+  if (level === 'A1' || level === 'A2') return { background: '#e8faf5', color: '#1a9e80', borderColor: '#2ec4a0' }
+  if (level === 'B1' || level === 'B2') return { background: '#eef4ff', color: '#4080f0', borderColor: '#4080f0' }
+  return { background: '#f3e8ff', color: '#7c3aed', borderColor: '#c4b5fd' }
+}
+
+export default function GlobalWordBank({ user }) {
+  const [activeTab, setActiveTab] = useState('global')
+
+  return (
+    <div>
+      {/* Tab switcher */}
+      <div style={s.tabRow}>
+        <button
+          style={{ ...s.tabBtn, ...(activeTab === 'global' ? s.tabBtnOn : {}) }}
+          onClick={() => setActiveTab('global')}
+        >
+          מאגר גלובלי
+        </button>
+        <button
+          style={{ ...s.tabBtn, ...(activeTab === 'mine' ? s.tabBtnOn : {}) }}
+          onClick={() => setActiveTab('mine')}
+        >
+          המילים שלי
+        </button>
+      </div>
+
+      {activeTab === 'global' ? <GlobalTab /> : <UserTab user={user} />}
+    </div>
+  )
+}
+
+/* ─── Global word bank tab ───────────────────────────────────────── */
+function GlobalTab() {
   const [allWords,     setAllWords]     = useState([])
   const [loading,      setLoading]      = useState(true)
   const [activeLevel,  setActiveLevel]  = useState('all')
@@ -52,26 +85,22 @@ export default function GlobalWordBank() {
     load()
   }, [])
 
-  // Reset letter when level changes
   useEffect(() => {
     const pool = activeLevel === 'all' ? allWords : allWords.filter(w => w.level === activeLevel)
     setActiveLetter(pool[0]?.word[0]?.toUpperCase() ?? null)
     setSearch('')
   }, [activeLevel, allWords])
 
-  // Auto-scroll active letter
   useEffect(() => {
     if (activeLetterRef.current && letterNavRef.current)
       activeLetterRef.current.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
   }, [activeLetter])
 
-  // Level counts (client-side)
   const levelCounts = {}
   LEVELS.forEach(l => { levelCounts[l] = allWords.filter(w => w.level === l).length })
 
-  // Filtering
-  const levelFiltered = activeLevel === 'all' ? allWords : allWords.filter(w => w.level === activeLevel)
-  const searchTrim    = search.trim().toLowerCase()
+  const levelFiltered    = activeLevel === 'all' ? allWords : allWords.filter(w => w.level === activeLevel)
+  const searchTrim       = search.trim().toLowerCase()
   const availableLetters = new Set(levelFiltered.map(w => w.word[0]?.toUpperCase()).filter(Boolean))
   const displayed = searchTrim
     ? levelFiltered.filter(w =>
@@ -86,14 +115,11 @@ export default function GlobalWordBank() {
 
   return (
     <div style={s.page}>
-
-      {/* Header */}
       <div style={s.header}>
         <h2 style={s.title}>מאגר המילים הגלובלי</h2>
         <p style={s.sub}>מילון Cambridge לרמות CEFR</p>
       </div>
 
-      {/* Level navbar */}
       <div style={s.levelNav}>
         <button
           style={{ ...s.levelBtn, ...(activeLevel === 'all' ? s.levelBtnAll : {}) }}
@@ -124,7 +150,6 @@ export default function GlobalWordBank() {
         })}
       </div>
 
-      {/* Letter navbar */}
       {showAlphaNav && (
         <div style={s.letterNav} ref={letterNavRef}>
           {ALL_LETTERS.map(letter => {
@@ -150,7 +175,6 @@ export default function GlobalWordBank() {
         </div>
       )}
 
-      {/* Search + stats bar */}
       <div style={s.filterBar}>
         <div style={s.searchWrap}>
           <span style={s.searchIcon}>🔍</span>
@@ -168,7 +192,6 @@ export default function GlobalWordBank() {
         </span>
       </div>
 
-      {/* Table */}
       {loading ? (
         <div style={s.center}>
           <div style={s.spinner} />
@@ -209,14 +232,152 @@ export default function GlobalWordBank() {
   )
 }
 
+/* ─── User word bank tab ─────────────────────────────────────────── */
+function UserTab({ user }) {
+  const [words,   setWords]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
+
+  useEffect(() => {
+    if (!user) return
+    async function load() {
+      setLoading(true)
+      const PAGE = 1000
+      let all = [], from = 0
+      while (true) {
+        const { data } = await supabase
+          .from('user_words')
+          .select('word, translation, level')
+          .eq('user_id', user.id)
+          .order('word')
+          .range(from, from + PAGE - 1)
+        if (!data?.length) break
+        all = [...all, ...data]
+        if (data.length < PAGE) break
+        from += PAGE
+      }
+      setWords(all)
+      setLoading(false)
+    }
+    load()
+  }, [user])
+
+  async function deleteWord(word) {
+    await supabase.from('user_words').delete().match({ user_id: user.id, word })
+    setWords(p => p.filter(w => w.word !== word))
+  }
+
+  const searchTrim = search.trim().toLowerCase()
+  const displayed  = searchTrim
+    ? words.filter(w =>
+        w.word.toLowerCase().includes(searchTrim) ||
+        (w.translation ?? '').toLowerCase().includes(searchTrim)
+      )
+    : words
+
+  return (
+    <div style={s.page}>
+      <div style={s.header}>
+        <h2 style={s.title}>המילים שלי</h2>
+        <p style={s.sub}>{loading ? '...' : `${words.length} מילים במאגר`}</p>
+      </div>
+
+      <div style={s.filterBar}>
+        <div style={s.searchWrap}>
+          <span style={s.searchIcon}>🔍</span>
+          <input
+            style={s.searchInput}
+            placeholder="חיפוש מילה או תרגום..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            dir="auto"
+          />
+          {search && <button style={s.clearSearch} onClick={() => setSearch('')}>✕</button>}
+        </div>
+        <span style={s.countBadge}>
+          {loading ? '...' : `${displayed.length} מילים`}
+        </span>
+      </div>
+
+      {loading ? (
+        <div style={s.center}>
+          <div style={s.spinner} />
+          <p style={{ color: c.ink3, fontSize: 13, marginTop: 12 }}>טוען...</p>
+        </div>
+      ) : words.length === 0 ? (
+        <div style={s.center}>
+          <span style={{ fontSize: 40 }}>📚</span>
+          <p style={{ color: c.ink3, fontSize: 14, marginTop: 8 }}>עדיין אין מילים — העלה קובץ כדי להתחיל</p>
+        </div>
+      ) : displayed.length === 0 ? (
+        <div style={s.center}>
+          <p style={{ color: c.ink3, fontSize: 13 }}>לא נמצאו תוצאות עבור "{search}"</p>
+        </div>
+      ) : (
+        <div style={s.tableWrap}>
+          <table style={s.table}>
+            <tbody>
+              {displayed.map(({ word, translation, level }, i) => (
+                <tr key={word} style={{ ...s.tableRow, ...(i % 2 !== 0 ? s.tableRowAlt : {}) }}>
+                  <td style={s.tdWord}>{word}</td>
+                  <td style={s.tdTrans}>{translation || <span style={{ color: c.ink3 }}>—</span>}</td>
+                  <td style={s.tdLevel}>
+                    {level && (
+                      <span style={{ ...s.levelBadge, ...getLevelStyle(level) }}>
+                        {level}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ ...s.tdLevel, width: 32 }}>
+                    <button style={s.delBtn} onClick={() => deleteWord(word)} title="מחק">×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const s = {
+  /* top tab switcher */
+  tabRow: {
+    display: 'flex',
+    gap: 0,
+    borderBottom: `2px solid ${c.border}`,
+    background: c.white,
+    position: 'sticky',
+    top: 60,
+    zIndex: 10,
+  },
+  tabBtn: {
+    flex: 1,
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    marginBottom: -2,
+    padding: '13px 8px',
+    fontSize: 14,
+    fontWeight: 500,
+    color: c.ink3,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    direction: 'rtl',
+    transition: 'color 0.15s',
+  },
+  tabBtnOn: {
+    color: c.mintD,
+    borderBottomColor: c.mint,
+  },
+
   page: { maxWidth: 480, margin: '0 auto', padding: '20px 0 32px', direction: 'rtl' },
 
   header: { textAlign: 'center', padding: '0 16px 16px' },
   title: { fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 600, color: c.ink, margin: '0 0 4px' },
   sub:   { fontSize: 12, color: c.ink3, margin: 0, letterSpacing: '0.5px' },
 
-  /* Level navbar */
   levelNav: {
     display: 'flex', gap: 5, padding: '0 16px 12px',
     overflowX: 'auto', scrollbarWidth: 'none',
@@ -230,7 +391,6 @@ const s = {
   levelBtnAll: { background: c.mintL, borderColor: c.mint, color: c.mintD, fontWeight: 700 },
   levelCount:  { fontSize: 10, fontWeight: 400, opacity: 0.65, marginTop: 2 },
 
-  /* Letter navbar */
   letterNav: {
     display: 'flex', gap: 3, padding: '6px 16px 8px',
     overflowX: 'auto', scrollbarWidth: 'none',
@@ -245,7 +405,6 @@ const s = {
   },
   letterBtnOff: { color: c.ink3, opacity: 0.2, cursor: 'default', borderColor: 'transparent' },
 
-  /* Filter / search bar */
   filterBar: {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '8px 16px', borderBottom: `1px solid ${c.border}`,
@@ -267,17 +426,21 @@ const s = {
   },
   countBadge: { fontSize: 12, color: c.ink3, whiteSpace: 'nowrap', flexShrink: 0 },
 
-  /* Table */
   tableWrap: { margin: '0 16px', borderRadius: 12, border: `1px solid ${c.border}`, overflow: 'hidden', background: c.white },
   table:     { width: '100%', borderCollapse: 'collapse' },
   tableRow:  { borderBottom: `1px solid ${c.border}` },
   tableRowAlt: { background: c.surface },
-  tdWord:  { padding: '10px 14px', fontSize: 14, fontWeight: 600, color: c.ink, direction: 'ltr', width: '38%' },
+  tdWord:  { padding: '10px 14px', fontSize: 14, fontWeight: 600, color: c.ink, direction: 'ltr', width: '35%' },
   tdTrans: { padding: '10px 8px', fontSize: 13, color: c.ink2, direction: 'rtl' },
-  tdLevel: { padding: '10px 12px 10px 0', width: 36, textAlign: 'right' },
+  tdLevel: { padding: '10px 8px 10px 0', width: 36, textAlign: 'right' },
   levelBadge: {
     fontSize: 9, fontWeight: 700, padding: '2px 5px',
     borderRadius: 4, border: '1px solid', display: 'inline-block',
+  },
+  delBtn: {
+    background: 'transparent', border: 'none',
+    color: c.ink3, fontSize: 16, cursor: 'pointer',
+    padding: '0 4px', lineHeight: 1,
   },
 
   center: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 16px', gap: 8 },

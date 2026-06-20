@@ -52,43 +52,14 @@ export default function UploadWords({ user }) {
   const [extracted, setExtracted] = useState([])
   const [freeText, setFreeText]   = useState('')
   const [manualWord, setManual]   = useState('')
-  const [saved, setSaved]         = useState([])
-  const [loadingBank, setLoadingBank] = useState(true)
   const [saving, setSaving]       = useState(false)
   const [toast, setToast]         = useState(null)
   const [setupNeeded, setSetup]   = useState(false)
-  const [filter, setFilter]       = useState('')
-  const [sortBy, setSortBy]       = useState('alpha')
-  const [bankModal, setBankModal] = useState(false)
   const fileRef = useRef()
-
-  useEffect(() => { loadBank() }, [])
 
   function showToast(type, text) {
     setToast({ type, text })
     setTimeout(() => setToast(null), 4000)
-  }
-
-  async function loadBank() {
-    setLoadingBank(true)
-    const PAGE = 1000
-    let all = [], from = 0, loadError = null
-    while (true) {
-      const { data, error } = await supabase
-        .from('user_words')
-        .select('word, source, translation, level, created_at')
-        .order('created_at', { ascending: false })
-        .range(from, from + PAGE - 1)
-      if (error) { loadError = error; break }
-      if (!data?.length) break
-      all = [...all, ...data]
-      if (data.length < PAGE) break
-      from += PAGE
-    }
-    setLoadingBank(false)
-    if (loadError) {
-      if (loadError.code === '42P01' || loadError.message.includes('does not exist')) setSetup(true)
-    } else setSaved(all)
   }
 
   async function processFile(file) {
@@ -161,15 +132,8 @@ export default function UploadWords({ user }) {
       return
     }
     setExtracted([])
-    const alreadyTranslated = new Set(saved.filter(w => w.translation).map(w => w.word))
-    const needsTranslation = wordsToSave.filter(w => !alreadyTranslated.has(w))
-    if (needsTranslation.length) {
-      showToast('success', `✓ ${wordsToSave.length} מילים נשמרו — מתרגם ${needsTranslation.length}...`)
-      await enrichWords(needsTranslation)
-    } else {
-      showToast('success', `✓ ${wordsToSave.length} מילים נשמרו`)
-    }
-    loadBank()
+    showToast('success', `✓ ${wordsToSave.length} מילים נשמרו — מתרגם...`)
+    await enrichWords(wordsToSave)
     setSaving(false)
   }
 
@@ -236,38 +200,7 @@ export default function UploadWords({ user }) {
     }
   }
 
-  async function translateMissing() {
-    const missing = saved.filter(w => !w.translation).map(w => w.word)
-    if (!missing.length) return
-    setSaving(true)
-    await enrichWords(missing)
-    loadBank()
-    setSaving(false)
-  }
-
-  async function deleteWord(word) {
-    await supabase.from('user_words').delete().match({ user_id: user.id, word })
-    setSaved(p => p.filter(w => w.word !== word))
-  }
-
   const activeSrc = SOURCES.find(s => s.id === src)
-  const LEVEL_ORDER = { A1: 1, A2: 2, B1: 3, B2: 4, C1: 5, C2: 6 }
-  const filterTrim = filter.trim().toLowerCase()
-  const filteredBank = filterTrim
-    ? saved.filter(w =>
-        w.word.toLowerCase().includes(filterTrim) ||
-        (w.translation ?? '').toLowerCase().includes(filterTrim)
-      )
-    : saved
-  const displayedBank = [...filteredBank].sort((a, b) => {
-    if (sortBy === 'alpha') return a.word.localeCompare(b.word)
-    if (sortBy === 'level') {
-      const la = LEVEL_ORDER[a.level] ?? 99
-      const lb = LEVEL_ORDER[b.level] ?? 99
-      return la !== lb ? la - lb : a.word.localeCompare(b.word)
-    }
-    return 0
-  })
 
   return (
     <div style={s.wrap}>
@@ -375,93 +308,6 @@ export default function UploadWords({ user }) {
               dir="ltr"
             />
             <button style={s.addBtn} onClick={addManual} disabled={!manualWord.trim()}>+ הוסף</button>
-          </div>
-        </div>
-      )}
-
-      {/* Word bank button */}
-      <button style={s.bankOpenBtn} onClick={() => setBankModal(true)}>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={s.bankTitle}>מאגר המילים שלי</span>
-          {!loadingBank && <span style={s.bankBadge}>{saved.length}</span>}
-        </div>
-        <span style={{ color:c.ink3, fontSize:13 }}>← פתח</span>
-      </button>
-
-      {/* Word bank modal */}
-      {bankModal && (
-        <div style={s.overlay} onClick={() => setBankModal(false)}>
-          <div style={s.modal} onClick={e => e.stopPropagation()}>
-            <div style={s.modalHead}>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={s.modalTitle}>מאגר המילים שלי</span>
-                <span style={s.bankBadge}>{saved.length}</span>
-              </div>
-              <button style={s.modalClose} onClick={() => setBankModal(false)}>✕</button>
-            </div>
-
-            {saved.some(w => !w.translation) && (
-              <button style={{ ...s.translateBtn, marginBottom:12, width:'100%' }} onClick={translateMissing} disabled={saving}>
-                {saving ? '...' : '✦ תרגם חסרים'}
-              </button>
-            )}
-
-            <div style={{ display:'flex', gap:6, marginBottom:12, alignItems:'center' }}>
-              <div style={s.searchWrap}>
-                <span style={s.searchIcon}>🔍</span>
-                <input
-                  style={s.searchInput}
-                  placeholder="חיפוש מילה או תרגום..."
-                  value={filter}
-                  onChange={e => setFilter(e.target.value)}
-                  dir="auto"
-                />
-                {filter && <button style={s.clearSearch} onClick={() => setFilter('')}>✕</button>}
-              </div>
-              <div style={s.sortBtns}>
-                {[['alpha','א-ב'],['level','רמה'],['date','תאריך']].map(([key,label]) => (
-                  <button key={key} style={{ ...s.sortBtn, ...(sortBy===key ? s.sortBtnOn : {}) }} onClick={() => setSortBy(key)}>{label}</button>
-                ))}
-              </div>
-            </div>
-
-            <div style={s.modalBody}>
-              {loadingBank ? (
-                <p style={{ color:c.ink3, textAlign:'center', padding:24, fontSize:13 }}>טוען...</p>
-              ) : saved.length === 0 ? (
-                <div style={s.emptyBank}>
-                  <span style={{ fontSize:40 }}>📚</span>
-                  <p>עדיין אין מילים — העלה קובץ כדי להתחיל</p>
-                </div>
-              ) : displayedBank.length === 0 ? (
-                <p style={{ color:c.ink3, fontSize:13, padding:'8px 0', textAlign:'center' }}>אין תוצאות</p>
-              ) : (
-                <table style={s.table}>
-                  <thead>
-                    <tr>
-                      <th style={s.th}>מילה</th>
-                      <th style={s.th}>תרגום</th>
-                      <th style={{ ...s.th, textAlign:'center' }}>רמה</th>
-                      <th style={s.th} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayedBank.map(({ word, translation, level }) => (
-                      <tr key={word} style={s.tr}>
-                        <td style={{ ...s.td, direction:'ltr', fontWeight:500, color:c.ink }}>{word}</td>
-                        <td style={{ ...s.td, color:c.ink2, fontSize:12 }}>{translation || '—'}</td>
-                        <td style={{ ...s.td, textAlign:'center' }}>
-                          {level && <span style={{ ...s.levelBadge, ...getLevelStyle(level) }}>{level}</span>}
-                        </td>
-                        <td style={{ ...s.td, textAlign:'center' }}>
-                          <button style={s.chipX} onClick={() => deleteWord(word)}>×</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </div>
         </div>
       )}
