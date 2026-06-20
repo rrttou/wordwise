@@ -195,7 +195,7 @@ export default function MemoryGame({ user, source, customWords, onBack }) {
     <div style={s.wrap}>
       {/* Header */}
       <div style={s.header}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
+        <button style={s.stopBtn} onClick={onBack}>✕ הפסק תרגול</button>
         <div style={s.headerStats}>
           <span style={s.hStat}>{matchedPairs}/{pairs} ✓</span>
           <span style={s.hDot} />
@@ -300,6 +300,7 @@ const s = {
 
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   ghostBtn: { background: 'transparent', border: 'none', color: c.ink3, cursor: 'pointer', fontSize: 13, padding: 0, fontFamily: 'inherit' },
+  stopBtn: { background: c.surface, border: `1.5px solid rgba(0,0,0,0.08)`, borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 500, color: c.ink2, cursor: 'pointer', fontFamily: 'inherit' },
   headerStats: { display: 'flex', alignItems: 'center', gap: 8, direction: 'ltr' },
   hStat: { fontSize: 12, color: c.ink3, fontWeight: 500 },
   hDot:  { width: 3, height: 3, borderRadius: '50%', background: c.ink3, flexShrink: 0 },

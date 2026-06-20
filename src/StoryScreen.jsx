@@ -190,7 +190,7 @@ export default function StoryScreen({ user, onBack, initialWords }) {
 
   return (
     <div style={s.wrap}>
-      {onBack && <button style={s.backBtn} onClick={onBack}>← חזור לתרגול</button>}
+      {onBack && <button style={s.backBtn} onClick={onBack}>✕ הפסק תרגול</button>}
 
       <div style={s.pageHeader}>
         <h2 style={s.pageTitle}>סיפור מותאם אישית</h2>
@@ -360,9 +360,17 @@ const s = {
   },
   pageSub: { fontSize: 13, color: c.ink3 },
   backBtn: {
-    background: 'transparent', border: 'none',
-    color: c.ink3, cursor: 'pointer', fontSize: 13,
-    padding: '0 0 16px 0', fontFamily: 'inherit',
+    background: c.surface,
+    border: '1.5px solid rgba(0,0,0,0.08)',
+    borderRadius: 8,
+    color: '#4a4a6a',
+    cursor: 'pointer',
+    fontSize: 12,
+    fontWeight: 500,
+    padding: '6px 12px',
+    fontFamily: 'inherit',
+    marginBottom: 16,
+    display: 'inline-block',
   },
 
   /* source toggle */

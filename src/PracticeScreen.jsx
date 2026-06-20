@@ -502,7 +502,7 @@ function QuizView({ user, direction, source, customWords, onBack, onFinish }) {
   return (
     <div style={s.wrap}>
       <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
+        <button style={s.stopBtn} onClick={onBack}>✕ הפסק תרגול</button>
         <span style={s.counter}>{current + 1} / {questions.length}</span>
       </div>
       <div style={s.track}><div style={{ ...s.bar, background: accent, width: progress + '%' }} /></div>
@@ -612,7 +612,7 @@ function SentenceWriteView({ user, source, customWords, onBack, onFinish }) {
   return (
     <div style={s.wrap}>
       <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
+        <button style={s.stopBtn} onClick={onBack}>✕ הפסק תרגול</button>
         <span style={s.counter}>{idx + 1} / {pool.length}</span>
       </div>
       <div style={s.track}><div style={{ ...s.bar, background: c.mint, width: progress + '%' }} /></div>
@@ -761,7 +761,7 @@ function SentenceMatchView({ user, source, customWords, onBack, onFinish }) {
   return (
     <div style={s.wrap}>
       <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
+        <button style={s.stopBtn} onClick={onBack}>✕ הפסק תרגול</button>
         <span style={s.counter}>{matchCount} / {sentences.length} הותאמו</span>
       </div>
 
@@ -878,7 +878,7 @@ function GrammarQuizView({ user, source, customWords, onBack, onFinish }) {
   return (
     <div style={s.wrap}>
       <div style={s.topRow}>
-        <button style={s.ghostBtn} onClick={onBack}>← חזור</button>
+        <button style={s.stopBtn} onClick={onBack}>✕ הפסק תרגול</button>
         <span style={s.counter}>{idx + 1} / {questions.length}</span>
       </div>
       <div style={s.track}><div style={{ ...s.bar, background: '#7c3aed', width: progress + '%' }} /></div>
@@ -960,6 +960,17 @@ const s = {
     background: 'transparent', border: 'none',
     color: c.ink3, cursor: 'pointer', fontSize: 13,
     padding: '4px 0', fontFamily: 'inherit',
+  },
+  stopBtn: {
+    background: c.surface,
+    border: `1.5px solid ${c.border}`,
+    borderRadius: 8,
+    padding: '6px 12px',
+    fontSize: 12,
+    fontWeight: 500,
+    color: c.ink2,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 
   /* current session card */
