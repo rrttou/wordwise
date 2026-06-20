@@ -41,7 +41,12 @@ export default function PracticeScreen({ user }) {
 
   useEffect(() => { loadSessions() }, [loadSessions])
 
-  const goHub = () => setView('hub')
+  const goHub = () => {
+    setCurrentWords([])
+    setCustom([])
+    setSource('own')
+    setView('hub')
+  }
   const dest  = exType
 
   function startWithWords(words) {
