@@ -37,9 +37,21 @@ export default function PracticeScreen({ user }) {
   const [source, setSource]               = useState('own')
   const [customWords, setCustom]          = useState([])
   const [result, setResult]               = useState(null)
-  const [sessionPicker, setSessionPicker] = useState(null) // session whose mode picker is open
+  const [sessionPicker, setSessionPicker] = useState(null)
+  const [recentWords, setRecentWords]     = useState([])
 
   useEffect(() => { loadSessions() }, [loadSessions])
+
+  useEffect(() => {
+    supabase
+      .from('user_words')
+      .select('id, word, translation, level')
+      .eq('user_id', user.id)
+      .not('translation', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(10)
+      .then(({ data }) => setRecentWords(data ?? []))
+  }, [user.id])
 
   const goHub = () => {
     setCurrentWords([])
@@ -93,6 +105,7 @@ export default function PracticeScreen({ user }) {
         wordCount={wordCount}
         setWordCount={setWordCount}
         pastSessions={pastSessions}
+        recentWords={recentWords}
         onStartWithCurrent={startWithCurrent}
         onPickWords={(type, param) => {
           setExType(type)
@@ -100,6 +113,7 @@ export default function PracticeScreen({ user }) {
           setView('word-picker')
         }}
         onPracticeSession={session => setSessionPicker(session)}
+        onPracticeRecent={() => setSessionPicker({ words: recentWords, id: 'recent' })}
       />
       {sessionPicker && (
         <SessionModePicker
@@ -121,8 +135,8 @@ function monthLabel(iso) {
 
 /* ─── Hub ────────────────────────────────────────────────────────── */
 function HubView({
-  onPickWords, onStartWithCurrent, onPracticeSession,
-  currentWords, wordCount, setWordCount, pastSessions,
+  onPickWords, onStartWithCurrent, onPracticeSession, onPracticeRecent,
+  currentWords, wordCount, setWordCount, pastSessions, recentWords,
 }) {
   const hasCurrent = currentWords.length > 0
   const [expandedId, setExpandedId] = useState(null)
@@ -157,6 +171,26 @@ function HubView({
           <button style={s.stepBtn} onClick={() => setWordCount(Math.min(30, wordCount + 2))}>+</button>
         </div>
       </div>
+
+      {/* Recently translated words */}
+      {recentWords.length > 0 && (
+        <div style={s.recentCard}>
+          <div style={s.recentHeader}>
+            <span style={s.recentLabel}>הוסף לאחרונה</span>
+            <button style={s.recentPracticeBtn} onClick={onPracticeRecent}>
+              תרגל אותן ←
+            </button>
+          </div>
+          <div style={s.recentChips}>
+            {recentWords.map(w => (
+              <div key={w.id} style={s.recentChip}>
+                <span style={s.recentWord}>{w.word}</span>
+                {w.translation && <span style={s.recentTrans}>{w.translation}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Mode cards */}
       <button style={{ ...s.modeCard, background: c.ink }} onClick={() => modeClick('quiz', 'en-he')}>
@@ -392,6 +426,7 @@ function QuizView({ user, direction, source, customWords, onBack, onFinish }) {
         .select('id, word, translation, level, correct_streak, wrong_count')
         .eq('user_id', user.id)
         .not('translation', 'is', null)
+        .eq('is_known', false)
         .limit(80)
       pool = data ?? []
     }
@@ -399,8 +434,8 @@ function QuizView({ user, direction, source, customWords, onBack, onFinish }) {
     if (pool.length < MIN_PICK) {
       setError(
         pool.length === 0
-          ? 'אין מילים עם תרגום — לחץ "תרגם חסרים" בדף המילים'
-          : `יש רק ${pool.length} מילים עם תרגום — צריך לפחות ${MIN_PICK}`
+          ? 'כל המילים שלך נלמדו! ניתן להחיות מילים ידועות בלשונית "מילים"'
+          : `יש רק ${pool.length} מילים זמינות לתרגול — צריך לפחות ${MIN_PICK}`
       )
       setLoading(false)
       return
@@ -470,8 +505,10 @@ function QuizView({ user, direction, source, customWords, onBack, onFinish }) {
 
     if (q.isUserWord) {
       if (isCorrect) {
-        const updates = { correct_streak: q.streak + 1 }
+        const newStreak = q.streak + 1
+        const updates = { correct_streak: newStreak }
         if (q.wrongCount > 0) updates.wrong_count = q.wrongCount - 1
+        if (newStreak >= 3) updates.is_known = true
         supabase.from('user_words').update(updates).eq('id', q.id).eq('user_id', user.id).then()
       } else {
         supabase.from('user_words')
@@ -545,6 +582,7 @@ async function fetchPool(user, source, customWords) {
     .select('id, word, translation, level, wrong_count')
     .eq('user_id', user.id)
     .not('translation', 'is', null)
+    .eq('is_known', false)
   if (source === 'wrong') q = q.gt('wrong_count', 0).order('wrong_count', { ascending: false })
   const { data } = await q.limit(40)
   return data ?? []
@@ -1069,6 +1107,64 @@ const s = {
     background: c.surface, borderRadius: 6,
     padding: '3px 8px', fontSize: 12, fontWeight: 500, color: c.ink,
     direction: 'ltr',
+  },
+
+  /* recently translated */
+  recentCard: {
+    background: c.goldL,
+    border: `1px solid #f0d090`,
+    borderRadius: 14,
+    padding: '14px 16px',
+    marginBottom: 14,
+  },
+  recentHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  recentLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '1.2px',
+    textTransform: 'uppercase',
+    color: '#b87800',
+  },
+  recentPracticeBtn: {
+    background: c.gold,
+    border: 'none',
+    borderRadius: 8,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 600,
+    padding: '5px 12px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  recentChips: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 6,
+    direction: 'ltr',
+  },
+  recentChip: {
+    background: 'rgba(255,255,255,0.7)',
+    border: `1px solid #f0d090`,
+    borderRadius: 8,
+    padding: '4px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  recentWord: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: c.ink,
+  },
+  recentTrans: {
+    fontSize: 10,
+    color: c.ink3,
+    marginTop: 1,
   },
 
   /* hub mode cards */

@@ -55,7 +55,30 @@ export default function UploadWords({ user }) {
   const [saving, setSaving]       = useState(false)
   const [toast, setToast]         = useState(null)
   const [setupNeeded, setSetup]   = useState(false)
+  const [knownWords, setKnownWords] = useState([])
+  const [knownOpen, setKnownOpen]   = useState(false)
   const fileRef = useRef()
+
+  useEffect(() => { loadKnownWords() }, [])
+
+  async function loadKnownWords() {
+    const { data } = await supabase
+      .from('user_words')
+      .select('id, word, translation')
+      .eq('user_id', user.id)
+      .eq('is_known', true)
+      .order('word')
+    setKnownWords(data ?? [])
+  }
+
+  async function reviveWord(id) {
+    await supabase
+      .from('user_words')
+      .update({ is_known: false, correct_streak: 0 })
+      .eq('id', id)
+      .eq('user_id', user.id)
+    setKnownWords(prev => prev.filter(w => w.id !== id))
+  }
 
   function showToast(type, text) {
     setToast({ type, text })
@@ -309,6 +332,39 @@ export default function UploadWords({ user }) {
             />
             <button style={s.addBtn} onClick={addManual} disabled={!manualWord.trim()}>+ הוסף</button>
           </div>
+        </div>
+      )}
+
+      {/* Known words section */}
+      {knownWords.length > 0 && (
+        <div style={s.knownSection}>
+          <button style={s.knownToggle} onClick={() => setKnownOpen(o => !o)}>
+            <span style={s.knownLabel}>
+              ✓ מילים שנלמדו
+              <span style={s.knownBadge}>{knownWords.length}</span>
+            </span>
+            <span style={{ fontSize: 10, color: c.ink3 }}>{knownOpen ? '▲' : '▼'}</span>
+          </button>
+          {knownOpen && (
+            <div style={s.knownBody}>
+              <p style={s.knownHint}>אלו מילים שענית עליהן נכון 3 פעמים. הן לא יופיעו בתרגול.</p>
+              <div style={s.knownChips}>
+                {knownWords.map(w => (
+                  <div key={w.id} style={s.knownChip}>
+                    <div style={s.knownWord}>{w.word}</div>
+                    {w.translation && <div style={s.knownTrans}>{w.translation}</div>}
+                    <button
+                      style={s.reviveBtn}
+                      onClick={() => reviveWord(w.id)}
+                      title="החזר לתרגול"
+                    >
+                      החזר ←
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -691,6 +747,88 @@ const s = {
     color: c.mintD,
     fontWeight: 500,
   },
+  /* known words */
+  knownSection: {
+    marginTop: 16,
+    background: c.white,
+    border: `1px solid ${c.border}`,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  knownToggle: {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '14px 16px',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  knownLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    color: c.mintD,
+  },
+  knownBadge: {
+    background: c.mintL,
+    color: c.mintD,
+    border: `1px solid ${c.mint}`,
+    borderRadius: 20,
+    padding: '1px 8px',
+    fontSize: 11,
+    fontWeight: 600,
+  },
+  knownBody: {
+    borderTop: `1px solid ${c.border}`,
+    padding: '12px 16px 16px',
+  },
+  knownHint: {
+    fontSize: 12,
+    color: c.ink3,
+    marginBottom: 12,
+  },
+  knownChips: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  knownChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    background: c.surface,
+    borderRadius: 10,
+    padding: '8px 12px',
+  },
+  knownWord: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: c.ink,
+    minWidth: 90,
+    direction: 'ltr',
+  },
+  knownTrans: {
+    fontSize: 12,
+    color: c.ink3,
+    flex: 1,
+  },
+  reviveBtn: {
+    background: c.white,
+    border: `1px solid ${c.border}`,
+    borderRadius: 7,
+    padding: '4px 10px',
+    fontSize: 11,
+    color: c.ink2,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    flexShrink: 0,
+  },
+
   /* toast */
   toast: {
     position: 'fixed',

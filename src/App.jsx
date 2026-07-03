@@ -395,7 +395,7 @@ function ResetPasswordScreen({ onSuccess }) {
 /* ─── Dashboard ──────────────────────────────────────────────────── */
 function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
   const [dailyWord, setDailyWord] = useState(null)
-  const [stats,     setStats]     = useState({ total: 0, learned: 0, accuracy: null })
+  const [stats,     setStats]     = useState({ total: 0, known: 0, accuracy: null })
 
   useEffect(() => {
     fetchDailyWord()
@@ -426,7 +426,7 @@ function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
     while (true) {
       const { data } = await supabase
         .from('user_words')
-        .select('correct_streak, wrong_count')
+        .select('correct_streak, wrong_count, is_known')
         .eq('user_id', user.id)
         .range(from, from + PAGE - 1)
       if (!data?.length) break
@@ -435,16 +435,16 @@ function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
       from += PAGE
     }
     const total        = all.length
-    const learned      = all.filter(w => (w.correct_streak ?? 0) > 0).length
+    const known        = all.filter(w => w.is_known).length
     const totalCorrect = all.reduce((s, w) => s + (w.correct_streak ?? 0), 0)
     const totalWrong   = all.reduce((s, w) => s + (w.wrong_count   ?? 0), 0)
     const accuracy     = totalCorrect + totalWrong > 0
       ? Math.round(totalCorrect / (totalCorrect + totalWrong) * 100)
       : null
-    setStats({ total, learned, accuracy })
+    setStats({ total, known, accuracy })
   }
 
-  const vocabProg = stats.total > 0 ? Math.round(stats.learned / stats.total * 100) : 0
+  const vocabProg = stats.total > 0 ? Math.round(stats.known / stats.total * 100) : 0
 
   return (
     <div style={s.wrap}>
@@ -468,7 +468,7 @@ function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
       <div style={s.modulesGrid}>
         <ModuleCard
           i={0} icon="📖" name="אוצר מילים"
-          sub={stats.total > 0 ? `${stats.learned} / ${stats.total} מילים` : '0 מילים'}
+          sub={stats.total > 0 ? `${stats.known} ידועות מתוך ${stats.total}` : '0 מילים'}
           prog={vocabProg}
           onClick={onUpload}
         />
@@ -481,8 +481,8 @@ function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
       <div style={s.sectionTitle}>הסטטיסטיקות שלך</div>
       <div style={s.statsRow}>
         <StatCard val={stats.total}                                    lbl="מילים"     />
+        <StatCard val={stats.known}                                    lbl="נלמדו"     />
         <StatCard val={stats.accuracy !== null ? `${stats.accuracy}%` : '—'} lbl="דיוק" />
-        <StatCard val={streak}                                         lbl="ימים רצוף" />
       </div>
 
       {/* Quick lookup */}
