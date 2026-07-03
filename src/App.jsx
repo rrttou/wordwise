@@ -142,7 +142,7 @@ export default function App() {
           {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
           {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
           {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
-          {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} />}
+          {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} onPractice={() => setTab('practice')} />}
           {isApp && tab === 'upload'    && <UploadWords user={user} />}
           {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
           {isApp && tab === 'wordbank'  && <GlobalWordBank user={user} />}
@@ -393,13 +393,22 @@ function ResetPasswordScreen({ onSuccess }) {
 }
 
 /* ─── Dashboard ──────────────────────────────────────────────────── */
-function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
-  const [dailyWord, setDailyWord] = useState(null)
-  const [stats,     setStats]     = useState({ total: 0, known: 0, accuracy: null })
+function DashboardScreen({ user, streak, onUpload, onQuickAdd, onPractice }) {
+  const [dailyWord,    setDailyWord]    = useState(null)
+  const [stats,        setStats]        = useState({ total: 0, known: 0, accuracy: null })
+  const [recentWords,  setRecentWords]  = useState([])
 
   useEffect(() => {
     fetchDailyWord()
     fetchStats()
+    supabase
+      .from('user_words')
+      .select('id, word, translation, level')
+      .eq('user_id', user.id)
+      .not('translation', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(10)
+      .then(({ data }) => setRecentWords(data ?? []))
   }, [])
 
   async function fetchDailyWord() {
@@ -484,6 +493,24 @@ function DashboardScreen({ user, streak, onUpload, onQuickAdd }) {
         <StatCard val={stats.known}                                    lbl="נלמדו"     />
         <StatCard val={stats.accuracy !== null ? `${stats.accuracy}%` : '—'} lbl="דיוק" />
       </div>
+
+      {/* Recently added word bank */}
+      {recentWords.length > 0 && (
+        <div style={s.recentSection}>
+          <div style={s.recentHead}>
+            <span style={s.sectionTitle} >הוסף לאחרונה</span>
+            <button style={s.recentBtn} onClick={onPractice}>תרגל ←</button>
+          </div>
+          <div style={s.recentGrid}>
+            {recentWords.map(w => (
+              <div key={w.id} style={s.recentChip}>
+                <span style={s.recentWord}>{w.word}</span>
+                {w.translation && <span style={s.recentTrans}>{w.translation}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quick lookup */}
       <button style={s.quickAddBtn} onClick={onQuickAdd}>
@@ -1164,6 +1191,52 @@ const s = {
   },
   errMsg: { color: c.rose, fontSize: 12, textAlign: 'center' },
   okMsg:  { color: c.mintD, fontSize: 12, textAlign: 'center' },
+
+  recentSection: {
+    marginBottom: 16,
+  },
+  recentHead: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  recentBtn: {
+    background: c.gold,
+    border: 'none',
+    borderRadius: 8,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 600,
+    padding: '5px 12px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  recentGrid: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 6,
+    direction: 'ltr',
+  },
+  recentChip: {
+    background: c.white,
+    border: `1px solid ${c.border}`,
+    borderRadius: 8,
+    padding: '5px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  recentWord: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: c.ink,
+  },
+  recentTrans: {
+    fontSize: 10,
+    color: c.ink3,
+    marginTop: 1,
+  },
 
   quickAddBtn: {
     width: '100%',
