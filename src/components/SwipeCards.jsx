@@ -35,6 +35,7 @@ export default function SwipeCards({ items, currentIndex, renderCard, style, mod
     return (
       <div
         ref={containerRef}
+        data-no-swipe="true"
         className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide py-3"
         style={{ cursor: 'grab', ...style }}
         onMouseDown={onMouseDown}

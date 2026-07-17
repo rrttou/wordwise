@@ -5,7 +5,18 @@ import { useSession } from './SessionContext'
 import MemoryGame from './MemoryGame'
 import WordPicker from './WordPicker'
 import SwipeCards from './components/SwipeCards'
+import PageSwiper from './components/PageSwiper'
 import { c } from './theme'
+
+const PRACTICE_MODES = [
+  { type: 'quiz', dir: 'en-he', emoji: '📚', title: 'אנגלית → עברית', sub: 'ראה מילה באנגלית, בחר את התרגום הנכון', accent: c.mintD, glow: 'rgba(16,185,129,0.14)' },
+  { type: 'quiz', dir: 'he-en', emoji: '🔤', title: 'עברית → אנגלית', sub: 'ראה תרגום בעברית, בחר את המילה הנכונה', accent: c.sky,   glow: 'rgba(59,130,246,0.14)'  },
+  { type: 'story',   dir: null, emoji: '✦',  title: 'סיפורים AI',     sub: 'צור סיפור אישי עם המילים שלך',             accent: c.gold,  glow: 'rgba(245,158,11,0.14)'  },
+  { type: 'write',   dir: null, emoji: '✍️', title: 'כתיבת משפטים',   sub: 'כתוב משפט לכל מילה — AI מתקן ומסביר',     accent: c.mintD, glow: 'rgba(16,185,129,0.10)'  },
+  { type: 'match',   dir: null, emoji: '🔗', title: 'התאמת משפטים',   sub: 'התאם בין משפטים למילים שנמצאות בהם',       accent: c.rose,  glow: 'rgba(244,63,94,0.14)'   },
+  { type: 'grammar', dir: null, emoji: '📝', title: 'מבחן דקדוק',      sub: 'שאלות על זמנים ודקדוק באנגלית',            accent: '#a78bfa', glow: 'rgba(167,139,250,0.14)'},
+  { type: 'memory',  dir: null, emoji: '🎴', title: 'משחק זיכרון',    sub: 'מצא זוגות: מילה באנגלית + תרגום בעברית',   accent: c.gold,  glow: 'rgba(245,158,11,0.12)'  },
+]
 
 const QUIZ_LENGTH = 10
 const MIN_PICK    = 4
@@ -196,50 +207,8 @@ function HubView({
         </div>
       )}
 
-      {/* Mode cards */}
-      <button style={{ ...s.modeCard, background: 'linear-gradient(135deg, #18181b 0%, #111113 100%)', border: '1px solid rgba(255,255,255,0.08)' }} onClick={() => modeClick('quiz', 'en-he')}>
-        <div style={s.modeLangs}><span style={{ color: c.mint, fontWeight: 700 }}>EN</span><span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span><span style={{ color: 'rgba(255,255,255,0.6)' }}>עב</span></div>
-        <div style={s.modeTitle}>אנגלית → עברית</div>
-        <div style={s.modeSub}>{hasCurrent ? 'תרגל את הקבוצה הפעילה' : 'ראה מילה באנגלית, בחר תרגום'}</div>
-        <span style={s.modeChevron}>←</span>
-      </button>
-
-      <button style={{ ...s.modeCard, background: c.sky }} onClick={() => modeClick('quiz', 'he-en')}>
-        <div style={s.modeLangs}><span style={{ color: '#fff', fontWeight: 700 }}>עב</span><span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span><span style={{ color: 'rgba(255,255,255,0.7)' }}>EN</span></div>
-        <div style={s.modeTitle}>עברית → אנגלית</div>
-        <div style={s.modeSub}>{hasCurrent ? 'תרגל את הקבוצה הפעילה' : 'ראה תרגום, בחר מילה באנגלית'}</div>
-        <span style={s.modeChevron}>←</span>
-      </button>
-
-      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.gold},#c87800)` }} onClick={() => modeClick('story')}>
-        <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>✦</span></div>
-        <div style={s.modeTitle}>סיפורים</div><div style={s.modeSub}>צור סיפור AI עם המילים שלך</div>
-        <span style={s.modeChevron}>←</span>
-      </button>
-
-      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.mint},#1a9e80)` }} onClick={() => modeClick('write')}>
-        <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>✍</span></div>
-        <div style={s.modeTitle}>כתיבת משפטים</div><div style={s.modeSub}>כתוב משפטים עם המילים, AI יתקן</div>
-        <span style={s.modeChevron}>←</span>
-      </button>
-
-      <button style={{ ...s.modeCard, background: `linear-gradient(135deg,${c.rose},#a03050)` }} onClick={() => modeClick('match')}>
-        <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>🔗</span></div>
-        <div style={s.modeTitle}>התאמת משפטים</div><div style={s.modeSub}>התאם בין משפטים למילים</div>
-        <span style={s.modeChevron}>←</span>
-      </button>
-
-      <button style={{ ...s.modeCard, background: 'linear-gradient(135deg,#7c3aed,#5b21b6)' }} onClick={() => modeClick('grammar')}>
-        <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>📝</span></div>
-        <div style={s.modeTitle}>מבחן דקדוק</div><div style={s.modeSub}>שאלות על זמנים דקדוקיים באנגלית</div>
-        <span style={s.modeChevron}>←</span>
-      </button>
-
-      <button style={{ ...s.modeCard, background: 'linear-gradient(135deg,#f59e0b,#d97706)' }} onClick={() => modeClick('memory')}>
-        <div style={s.modeLangs}><span style={{ color: '#fff', fontSize: 18 }}>🎴</span></div>
-        <div style={s.modeTitle}>משחק זיכרון</div><div style={s.modeSub}>{hasCurrent ? `${currentWords.length} זוגות — הפוך וגלה` : 'מצא זוגות: אנגלית + עברית'}</div>
-        <span style={s.modeChevron}>←</span>
-      </button>
+      {/* Mode swiper */}
+      <ModeSwiper hasCurrent={hasCurrent} onModeClick={modeClick} />
 
       {/* ── History ── */}
       <div style={s.historySection}>
@@ -979,6 +948,92 @@ function GrammarQuizView({ user, source, customWords, onBack, onFinish }) {
   )
 }
 
+/* ─── Practice mode swiper ──────────────────────────────────────── */
+function ModeSwiper({ hasCurrent, onModeClick }) {
+  const [idx, setIdx] = useState(0)
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <PageSwiper index={idx} onIndexChange={setIdx}>
+        {PRACTICE_MODES.map((m, i) => (
+          <ModeCard key={i} mode={m} hasCurrent={hasCurrent} onClick={() => onModeClick(m.type, m.dir)} />
+        ))}
+      </PageSwiper>
+      <SwipeDots count={PRACTICE_MODES.length} active={idx} onDot={setIdx} />
+    </div>
+  )
+}
+
+function ModeCard({ mode, hasCurrent, onClick }) {
+  return (
+    <div style={{
+      margin: '4px 16px',
+      padding: '36px 24px 32px',
+      background: `radial-gradient(ellipse at 50% -10%, ${mode.glow} 0%, transparent 65%), ${c.surface}`,
+      border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 24,
+      textAlign: 'center',
+      direction: 'rtl',
+      minHeight: 300,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{ fontSize: 60, lineHeight: 1, marginBottom: 18 }}>{mode.emoji}</div>
+      <div style={{
+        fontFamily: "'Playfair Display', serif",
+        fontSize: 26, fontWeight: 700, color: c.ink,
+        marginBottom: 10, letterSpacing: '-0.5px',
+      }}>
+        {mode.title}
+      </div>
+      <p style={{ fontSize: 13, color: c.ink3, lineHeight: 1.6, marginBottom: 28, maxWidth: 260 }}>
+        {mode.sub}
+      </p>
+      <button
+        onClick={onClick}
+        style={{
+          background: mode.accent,
+          color: '#09090b',
+          border: 'none',
+          borderRadius: 12,
+          padding: '13px 36px',
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          boxShadow: `0 4px 20px ${mode.glow}`,
+        }}
+      >
+        {hasCurrent ? 'תרגל קבוצה פעילה' : 'בחר מילים והתחל'}
+      </button>
+    </div>
+  )
+}
+
+function SwipeDots({ count, active, onDot }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '12px 0 4px' }}>
+      {Array.from({ length: count }, (_, i) => (
+        <button
+          key={i}
+          onClick={() => onDot(i)}
+          style={{
+            height: 6,
+            width: i === active ? 20 : 6,
+            borderRadius: 3,
+            background: i === active ? c.mintD : 'rgba(255,255,255,0.12)',
+            transition: 'all 0.25s ease',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 /* ─── Results ────────────────────────────────────────────────────── */
 function ResultsView({ score, total, onRepeat, onHub }) {
   const pct   = Math.round((score / total) * 100)
@@ -1185,24 +1240,6 @@ const s = {
     fontSize: 10,
     color: c.ink3,
     marginTop: 1,
-  },
-
-  /* hub mode cards */
-  modeCard: {
-    width: '100%', borderRadius: 20, padding: '20px 22px',
-    border: 'none', cursor: 'pointer', marginBottom: 10,
-    textAlign: 'right', position: 'relative',
-    fontFamily: 'inherit', display: 'block',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-  },
-  modeLangs: { fontSize: 16, marginBottom: 8, letterSpacing: '1px' },
-  modeTitle: { color: '#fff', fontSize: 17, fontWeight: 700, marginBottom: 4, letterSpacing: '-0.2px' },
-  modeSub:   { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
-  modeChevron: {
-    position: 'absolute', top: '50%', left: 20,
-    transform: 'translateY(-50%)',
-    color: 'rgba(255,255,255,0.4)', fontSize: 20,
   },
 
   /* sentence match chips */

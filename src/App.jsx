@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase, supabaseMissingConfig } from './supabase'
 import UploadWords from './UploadWords'
 import StoryScreen from './StoryScreen'
@@ -7,8 +7,17 @@ import PracticeScreen from './PracticeScreen'
 import GlobalWordBank from './GlobalWordBank'
 import { SessionProvider } from './SessionContext'
 import Layout from './components/Layout'
-import { TopBar, BottomNav } from './components/Navbar'
+import { TopBar } from './components/Navbar'
+import PageSwiper from './components/PageSwiper'
 import { c, MOD_COLORS } from './theme'
+
+const TABS = [
+  { id: 'dashboard', label: 'בית'    },
+  { id: 'upload',    label: 'מילים'  },
+  { id: 'practice',  label: 'תרגול'  },
+  { id: 'wordbank',  label: 'מילון'  },
+  { id: 'profile',   label: 'פרופיל' },
+]
 
 /* ─── Streak helper ──────────────────────────────────────────────── */
 async function updateStreak(userId) {
@@ -109,7 +118,8 @@ export default function App() {
     )
   }
 
-  const isApp = screen === 'app'
+  const isApp    = screen === 'app'
+  const tabIndex = TABS.findIndex(t => t.id === tab)
 
   return (
     <Layout>
@@ -123,30 +133,84 @@ export default function App() {
             onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
           />
 
-          <main style={{ paddingBottom: isApp ? 86 : 0 }}>
-            {screen === 'landing'          && <LandingScreen onStart={() => setScreen('auth')} />}
-            {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
-            {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
-            {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
-            {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} onPractice={() => setTab('practice')} />}
-            {isApp && tab === 'upload'    && <UploadWords user={user} />}
-            {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
-            {isApp && tab === 'wordbank'  && <GlobalWordBank user={user} />}
-            {isApp && tab === 'profile'   && (
-              <ProfileScreen
-                user={user}
-                onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
-              />
+          {isApp && <TabStrip tab={tab} setTab={setTab} />}
+
+          <main>
+            {screen === 'landing'        && <LandingScreen onStart={() => setScreen('auth')} />}
+            {screen === 'auth'           && <AuthScreen    onSuccess={enterApp} />}
+            {screen === 'reset-password' && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
+            {screen === 'placement-test' && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
+
+            {isApp && (
+              <PageSwiper index={tabIndex} onIndexChange={i => setTab(TABS[i].id)}>
+                <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} onPractice={() => setTab('practice')} />
+                <UploadWords user={user} />
+                <PracticeScreen user={user} />
+                <GlobalWordBank user={user} />
+                <ProfileScreen user={user} onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }} />
+              </PageSwiper>
             )}
           </main>
 
-          {isApp && <BottomNav tab={tab} setTab={setTab} />}
           {isApp && quickAdd && (
             <QuickAddModal user={user} onClose={() => setQuickAdd(false)} />
           )}
         </div>
       </SessionProvider>
     </Layout>
+  )
+}
+
+/* ─── Tab strip ──────────────────────────────────────────────────── */
+function TabStrip({ tab, setTab }) {
+  const ref = useRef(null)
+  const idx = TABS.findIndex(t => t.id === tab)
+
+  useEffect(() => {
+    const el = ref.current?.children[idx]
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [idx])
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        display: 'flex',
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        background: 'rgba(9,9,11,0.95)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        position: 'sticky',
+        top: 60,
+        zIndex: 90,
+      }}
+    >
+      {TABS.map(t => (
+        <button
+          key={t.id}
+          onClick={() => setTab(t.id)}
+          style={{
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            borderBottom: t.id === tab ? `2px solid ${c.mint}` : '2px solid transparent',
+            padding: '13px 22px',
+            fontSize: 14,
+            fontWeight: t.id === tab ? 600 : 400,
+            color: t.id === tab ? c.ink : c.ink3,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
+            transition: 'color 0.15s, border-color 0.15s',
+          }}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
