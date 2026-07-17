@@ -4,19 +4,11 @@ import StoryScreen from './StoryScreen'
 import { useSession } from './SessionContext'
 import MemoryGame from './MemoryGame'
 import WordPicker from './WordPicker'
+import SwipeCards from './components/SwipeCards'
+import { c } from './theme'
 
 const QUIZ_LENGTH = 10
 const MIN_PICK    = 4
-
-const c = {
-  ink:'#1a1a2e', ink2:'#4a4a6a', ink3:'#8888aa',
-  cream:'#faf8f4', surface:'#f0ede6', white:'#ffffff',
-  mint:'#2ec4a0', mintL:'#e8faf5', mintD:'#1a9e80',
-  gold:'#e8a020', goldL:'#fff8e8',
-  rose:'#e05070', roseL:'#fef0f3',
-  sky:'#4080f0',  skyL:'#eef4ff',
-  border:'rgba(0,0,0,0.08)',
-}
 
 function shuffle(arr) {
   const a = [...arr]
@@ -536,9 +528,9 @@ function QuizView({ user, direction, source, customWords, onBack, onFinish }) {
     </div>
   )
 
-  const q       = questions[current]
-  const isEnHe  = direction === 'en-he'
-  const accent  = isEnHe ? c.ink : c.sky
+  const q        = questions[current]
+  const isEnHe   = direction === 'en-he'
+  const accent   = isEnHe ? c.ink : c.sky
   const progress = (current / questions.length) * 100
 
   return (
@@ -549,27 +541,43 @@ function QuizView({ user, direction, source, customWords, onBack, onFinish }) {
       </div>
       <div style={s.track}><div style={{ ...s.bar, background: accent, width: progress + '%' }} /></div>
 
-      <div style={{ ...s.card, background: accent }}>
-        <div style={s.dirLabel}>{isEnHe ? 'EN → עב' : 'עב → EN'}</div>
-        <div style={s.qWord}>{q.question}</div>
-        <p style={s.qPrompt}>{isEnHe ? 'מה התרגום הנכון?' : 'What is the correct word?'}</p>
-      </div>
-
-      <div style={s.options}>
-        {q.options.map((opt, i) => {
-          let os = s.opt
-          if (chosen !== null) {
-            if (opt.correct)       os = { ...s.opt, ...s.optGreen }
-            else if (i === chosen) os = { ...s.opt, ...s.optRed }
-          }
+      <SwipeCards
+        items={questions}
+        currentIndex={current}
+        renderCard={(cardQ, cardIdx) => {
+          const isActive = cardIdx === current
           return (
-            <button key={i} style={os} onClick={() => handleAnswer(i)} disabled={chosen !== null}>
-              <span style={s.letter}>{String.fromCharCode(65 + i)}</span>
-              <span style={s.optText}>{opt.text}</span>
-            </button>
+            <>
+              <div style={{ ...s.card, background: accent }}>
+                <div style={s.dirLabel}>{isEnHe ? 'EN → עב' : 'עב → EN'}</div>
+                <div style={s.qWord}>{cardQ.question}</div>
+                <p style={s.qPrompt}>{isEnHe ? 'מה התרגום הנכון?' : 'What is the correct word?'}</p>
+              </div>
+
+              <div style={s.options}>
+                {cardQ.options.map((opt, i) => {
+                  let os = s.opt
+                  if (isActive && chosen !== null) {
+                    if (opt.correct)       os = { ...s.opt, ...s.optGreen }
+                    else if (i === chosen) os = { ...s.opt, ...s.optRed }
+                  }
+                  return (
+                    <button
+                      key={i}
+                      style={os}
+                      onClick={() => isActive && handleAnswer(i)}
+                      disabled={!isActive || chosen !== null}
+                    >
+                      <span style={s.letter}>{String.fromCharCode(65 + i)}</span>
+                      <span style={s.optText}>{opt.text}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
           )
-        })}
-      </div>
+        }}
+      />
     </div>
   )
 }

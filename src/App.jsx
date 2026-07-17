@@ -6,24 +6,9 @@ import PlacementTestScreen from './PlacementTest'
 import PracticeScreen from './PracticeScreen'
 import GlobalWordBank from './GlobalWordBank'
 import { SessionProvider } from './SessionContext'
-
-/* ─── Tokens ─────────────────────────────────────────────────────── */
-const c = {
-  ink:'#1a1a2e', ink2:'#4a4a6a', ink3:'#8888aa',
-  cream:'#faf8f4', surface:'#f0ede6', white:'#ffffff',
-  mint:'#2ec4a0', mintL:'#e8faf5', mintD:'#1a9e80',
-  gold:'#e8a020', goldL:'#fff8e8',
-  rose:'#e05070', roseL:'#fef0f3',
-  sky:'#4080f0',  skyL:'#eef4ff',
-  border:'rgba(0,0,0,0.08)',
-}
-
-const MOD_COLORS = [
-  { bg: c.skyL,  bar: c.sky  },
-  { bg: c.mintL, bar: c.mint },
-  { bg: c.roseL, bar: c.rose },
-  { bg: c.goldL, bar: c.gold },
-]
+import Layout from './components/Layout'
+import { TopBar, BottomNav } from './components/Navbar'
+import { c, MOD_COLORS } from './theme'
 
 /* ─── Streak helper ──────────────────────────────────────────────── */
 async function updateStreak(userId) {
@@ -127,114 +112,44 @@ export default function App() {
   const isApp = screen === 'app'
 
   return (
-    <SessionProvider user={user}>
-      <div style={{ background: c.cream, minHeight: '100vh' }}>
-        <TopBar
-          user={user} screen={screen} streak={streak}
-          onHome={goHome}
-          onLogin={() => setScreen('auth')}
-          onBack={() => setScreen(user ? 'app' : 'landing')}
-          onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
-        />
+    <Layout>
+      <SessionProvider user={user}>
+        <div style={{ background: c.cream, minHeight: '100vh' }}>
+          <TopBar
+            user={user} screen={screen} streak={streak}
+            onHome={goHome}
+            onLogin={() => setScreen('auth')}
+            onBack={() => setScreen(user ? 'app' : 'landing')}
+            onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
+          />
 
-        <main style={{ paddingTop: 60, paddingBottom: isApp ? 86 : 0 }}>
-          {screen === 'landing'          && <LandingScreen onStart={() => setScreen('auth')} />}
-          {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
-          {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
-          {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
-          {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} onPractice={() => setTab('practice')} />}
-          {isApp && tab === 'upload'    && <UploadWords user={user} />}
-          {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
-          {isApp && tab === 'wordbank'  && <GlobalWordBank user={user} />}
-          {isApp && tab === 'profile'   && (
-            <ProfileScreen
-              user={user}
-              onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
-            />
+          <main style={{ paddingTop: 60, paddingBottom: isApp ? 86 : 0 }}>
+            {screen === 'landing'          && <LandingScreen onStart={() => setScreen('auth')} />}
+            {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
+            {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
+            {screen === 'placement-test'   && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
+            {isApp && tab === 'dashboard' && <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} onPractice={() => setTab('practice')} />}
+            {isApp && tab === 'upload'    && <UploadWords user={user} />}
+            {isApp && tab === 'practice'  && <PracticeScreen user={user} />}
+            {isApp && tab === 'wordbank'  && <GlobalWordBank user={user} />}
+            {isApp && tab === 'profile'   && (
+              <ProfileScreen
+                user={user}
+                onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
+              />
+            )}
+          </main>
+
+          {isApp && <BottomNav tab={tab} setTab={setTab} />}
+          {isApp && quickAdd && (
+            <QuickAddModal user={user} onClose={() => setQuickAdd(false)} />
           )}
-        </main>
-
-        {isApp && <BottomNav tab={tab} setTab={setTab} />}
-        {isApp && quickAdd && (
-          <QuickAddModal user={user} onClose={() => setQuickAdd(false)} />
-        )}
-      </div>
-    </SessionProvider>
+        </div>
+      </SessionProvider>
+    </Layout>
   )
 }
 
-/* ─── Top bar ────────────────────────────────────────────────────── */
-function TopBar({ user, screen, streak, onHome, onLogin, onBack, onLogout }) {
-  const isApp = screen === 'app'
-
-  return (
-    <header style={s.topBar}>
-      <div style={s.wrap}>
-        {isApp ? (
-          <>
-            <div style={s.greeting}>
-              שלום, <b style={{ fontWeight: 500 }}>{user?.email?.split('@')[0]}</b> 👋
-            </div>
-            <div style={s.streakPill}>
-              <span style={s.streakDot} />
-              {streak} {streak === 1 ? 'יום רצוף' : 'ימים רצוף'}
-            </div>
-          </>
-        ) : screen === 'landing' ? (
-          <>
-            <button style={s.brandBtn} onClick={onHome}>
-              <span style={{ color: c.mint }}>✦</span> WordWise
-            </button>
-            <button style={s.topSignIn} onClick={onLogin}>התחבר</button>
-          </>
-        ) : (
-          <>
-            <button style={s.topBack} onClick={onBack}>← חזור</button>
-            <button style={s.brandBtn} onClick={onHome}>
-              <span style={{ color: c.mint }}>✦</span> WordWise
-            </button>
-          </>
-        )}
-      </div>
-    </header>
-  )
-}
-
-/* ─── Bottom nav ─────────────────────────────────────────────────── */
-function BottomNav({ tab, setTab }) {
-  const items = [
-    { id: 'dashboard', label: 'בית',     iconBg: c.ink },
-    { id: 'upload',    label: 'מילים',   iconBg: c.sky },
-    { id: 'practice',  label: 'תרגול',   iconBg: c.rose },
-    { id: 'wordbank',  label: 'מילון',    iconBg: c.gold },
-    { id: 'profile',   label: 'פרופיל',  iconBg: c.surface, border: true },
-  ]
-  return (
-    <nav style={s.bottomNav}>
-      <div style={{ ...s.wrap, display: 'flex', padding: '8px 8px' }}>
-        {items.map(item => {
-          const on = tab === item.id
-          return (
-            <button
-              key={item.id}
-              style={{ ...s.navItem, ...(on ? s.navItemOn : {}) }}
-              onClick={() => setTab(item.id)}
-            >
-              <div style={{
-                ...s.navIcon,
-                background: item.iconBg,
-                ...(item.border ? { border: '1.5px solid rgba(0,0,0,0.12)' } : {}),
-              }} />
-              <span style={{ ...s.navLabel, color: on ? c.mintD : c.ink3 }}>
-                {item.label}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </nav>
-  )
-}
 
 /* ─── Landing ────────────────────────────────────────────────────── */
 function LandingScreen({ onStart }) {
@@ -852,8 +767,6 @@ const sq = {
   },
 }
 
-/* ─── FAB ────────────────────────────────────────────────────────── */
-
 /* ─── Styles ─────────────────────────────────────────────────────── */
 const s = {
   /* layout */
@@ -862,107 +775,6 @@ const s = {
     margin: '0 auto',
     padding: '20px 16px',
     direction: 'rtl',
-  },
-
-  /* top bar */
-  topBar: {
-    position: 'fixed',
-    top: 0, left: 0, right: 0,
-    height: 60,
-    background: 'rgba(250,248,244,0.94)',
-    backdropFilter: 'blur(16px)',
-    borderBottom: '1px solid rgba(0,0,0,0.07)',
-    zIndex: 100,
-    display: 'flex',
-    alignItems: 'center',
-  },
-  greeting: {
-    fontSize: 13,
-    color: c.ink3,
-    direction: 'rtl',
-  },
-  streakPill: {
-    background: c.goldL,
-    border: '1.5px solid #f0d090',
-    borderRadius: 20,
-    padding: '5px 12px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    fontSize: 12,
-    fontWeight: 500,
-    color: '#b87800',
-  },
-  streakDot: {
-    width: 12,
-    height: 12,
-    borderRadius: '50%',
-    background: c.gold,
-    flexShrink: 0,
-  },
-  brandBtn: {
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 16,
-    fontWeight: 600,
-    color: c.ink,
-    padding: 0,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-  },
-  topSignIn: {
-    background: c.mint,
-    border: 'none',
-    borderRadius: 8,
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 500,
-    padding: '7px 14px',
-  },
-  topBack: {
-    background: 'transparent',
-    border: 'none',
-    color: c.ink3,
-    cursor: 'pointer',
-    fontSize: 14,
-    padding: 0,
-  },
-
-  /* bottom nav */
-  bottomNav: {
-    position: 'fixed',
-    bottom: 0, left: 0, right: 0,
-    background: c.white,
-    borderTop: '1px solid rgba(0,0,0,0.07)',
-    zIndex: 100,
-  },
-  navItem: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 3,
-    padding: '8px 4px',
-    borderRadius: 8,
-    cursor: 'pointer',
-    background: 'transparent',
-    border: 'none',
-  },
-  navItemOn: {
-    background: c.mintL,
-  },
-  navIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-  },
-  navLabel: {
-    fontSize: 9,
-    fontWeight: 500,
-    letterSpacing: '0.5px',
   },
 
   /* hero card */
