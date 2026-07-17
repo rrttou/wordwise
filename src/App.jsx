@@ -154,41 +154,73 @@ export default function App() {
 /* ─── Landing ────────────────────────────────────────────────────── */
 function LandingScreen({ onStart }) {
   return (
-    <div style={s.wrap}>
+    <div style={{ direction: 'rtl', background: c.cream }}>
 
-      {/* Hero card */}
-      <div style={s.heroCard}>
-        <div style={s.heroLabel}>✦ לפסיכומטרי · בגרות · פטור</div>
-        <div style={{ ...s.heroWord, fontSize: 42 }}>WordWise</div>
-        <div style={s.heroDef}>
-          העלה מילים ממקורות שלך — Excel, PDF, תמונה ועוד.
-          קבל סיפורים מותאמים אישית ותרגל עד שהמילים נצרבות.
+      {/* Hero — full bleed gradient */}
+      <div style={sl.hero}>
+        <div style={sl.heroBubble1} />
+        <div style={sl.heroBubble2} />
+
+        <div style={sl.heroBadge}>✦ לפסיכומטרי · בגרות · פטור</div>
+
+        <h1 style={sl.heroTitle}>
+          Word<span style={{ color: c.mint }}>Wise</span>
+        </h1>
+
+        <p style={sl.heroSub}>
+          העלה מילים, קבל סיפורים מותאמי&nbsp;AI,
+          ותרגל עד שהמילים נצרבות לזיכרון.
+        </p>
+
+        <button style={sl.heroCta} onClick={onStart}>
+          התחל ללמוד בחינם ←
+        </button>
+        <p style={sl.heroNote}>ללא כרטיס אשראי · עברית מלאה</p>
+      </div>
+
+      {/* Stats strip */}
+      <div style={sl.statsStrip}>
+        {[
+          { val: '8+', lbl: 'מקורות', sub: 'Excel, PDF, תמונה' },
+          { val: 'AI', lbl: 'מותאם',  sub: 'סיפורים אישיים'   },
+          { val: '∞',  lbl: 'חזרות',  sub: 'זיכרון ארוך טווח' },
+        ].map(({ val, lbl, sub }, i) => (
+          <div key={i} style={{ ...sl.statCell, ...(i < 2 ? sl.statCellBorder : {}) }}>
+            <div style={sl.statVal}>{val}</div>
+            <div style={sl.statLbl}>{lbl}</div>
+            <div style={sl.statSub}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Feature list */}
+      <div style={sl.section}>
+        <div style={sl.sectionHead}>כל מה שצריך ללמוד</div>
+        <div style={sl.featureList}>
+          {[
+            { icon: '📤', name: 'העלה מכל מקום',       sub: 'Excel, PDF, תמונה, טקסט', col: c.skyL  },
+            { icon: '📖', name: 'סיפורים מותאמי AI',    sub: 'כל 8 מילים = סיפור אישי', col: c.mintL },
+            { icon: '🧠', name: 'תרגול אינטראקטיבי',    sub: 'כרטיסיות ומעקב ביצועים',  col: c.roseL },
+            { icon: '📊', name: 'מעקב התקדמות',         sub: 'ראה אילו מילים אתה שולט',  col: c.goldL },
+          ].map((f, i) => (
+            <div key={i} style={sl.featureRow}>
+              <div style={{ ...sl.featureIcon, background: f.col }}>{f.icon}</div>
+              <div>
+                <div style={sl.featureName}>{f.name}</div>
+                <div style={sl.featureSub}>{f.sub}</div>
+              </div>
+            </div>
+          ))}
         </div>
-        <div style={s.heroActions}>
-          <button style={s.btnPrimary} onClick={onStart}>התחל ללמוד בחינם</button>
-        </div>
       </div>
 
-      {/* Stats */}
-      <div style={s.sectionTitle}>הסטטיסטיקות שלנו</div>
-      <div style={s.statsRow}>
-        <StatCard val="8"  lbl="מילים בסיפור" />
-        <StatCard val="AI" lbl="מותאם אישית"  />
-        <StatCard val="∞"  lbl="חזרות חכמות"  />
+      {/* Bottom CTA card */}
+      <div style={sl.ctaCard}>
+        <div style={sl.ctaTitle}>מוכן להתחיל?</div>
+        <p style={sl.ctaSub}>הצטרף ולמד אנגלית תוך 2 דקות</p>
+        <button style={sl.ctaBtn} onClick={onStart}>צור חשבון חינמי</button>
       </div>
 
-      {/* Modules preview */}
-      <div style={s.sectionTitle}>מה תלמד</div>
-      <div style={s.modulesGrid}>
-        <ModuleCard i={0} icon="📤" name="העלה מילים"  sub="5 מקורות"      prog={0} />
-        <ModuleCard i={1} icon="📖" name="סיפורים"     sub="AI מותאם"      prog={0} />
-        <ModuleCard i={2} icon="🧠" name="תרגול"       sub="כרטיסיות"      prog={0} />
-        <ModuleCard i={3} icon="📊" name="התקדמות"     sub="מעקב ביצועים"  prog={0} />
-      </div>
-
-      <p style={{ textAlign: 'center', color: c.ink3, fontSize: 12, marginTop: 4, paddingBottom: 16 }}>
-        ללא כרטיס אשראי · עברית מלאה
-      </p>
     </div>
   )
 }
@@ -764,6 +796,104 @@ const sq = {
     fontSize: 12,
     textAlign: 'center',
     marginBottom: 8,
+  },
+}
+
+/* ─── Landing styles ────────────────────────────────────────────── */
+const sl = {
+  hero: {
+    background: `linear-gradient(150deg, ${c.ink} 0%, #16213e 55%, #0f3460 100%)`,
+    padding: '52px 24px 40px',
+    position: 'relative',
+    overflow: 'hidden',
+    direction: 'rtl',
+  },
+  heroBubble1: {
+    position: 'absolute', top: -70, left: -50,
+    width: 220, height: 220, borderRadius: '50%',
+    background: 'rgba(46,196,160,0.09)', pointerEvents: 'none',
+  },
+  heroBubble2: {
+    position: 'absolute', bottom: -50, right: -30,
+    width: 160, height: 160, borderRadius: '50%',
+    background: 'rgba(46,196,160,0.07)', pointerEvents: 'none',
+  },
+  heroBadge: {
+    display: 'inline-flex', alignItems: 'center',
+    background: 'rgba(46,196,160,0.15)',
+    border: '1px solid rgba(46,196,160,0.3)',
+    borderRadius: 20, padding: '5px 14px', marginBottom: 22,
+    color: c.mint, fontSize: 11, fontWeight: 600, letterSpacing: '1px',
+  },
+  heroTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 58, fontWeight: 700, color: '#fff',
+    lineHeight: 1.0, marginBottom: 18, letterSpacing: '-1.5px',
+  },
+  heroSub: {
+    fontSize: 15, color: 'rgba(255,255,255,0.68)',
+    lineHeight: 1.65, marginBottom: 34, maxWidth: 300,
+  },
+  heroCta: {
+    background: c.mint, color: '#fff', border: 'none',
+    borderRadius: 14, padding: '16px 32px',
+    fontSize: 16, fontWeight: 600, cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 8px 28px rgba(46,196,160,0.45)',
+    display: 'block',
+  },
+  heroNote: {
+    color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 14,
+  },
+  statsStrip: {
+    background: '#fff', display: 'grid',
+    gridTemplateColumns: 'repeat(3,1fr)',
+    borderBottom: `1px solid ${c.border}`,
+  },
+  statCell: {
+    padding: '20px 10px', textAlign: 'center',
+  },
+  statCellBorder: {
+    borderRight: `1px solid ${c.border}`,
+  },
+  statVal: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 30, fontWeight: 700, color: c.ink,
+  },
+  statLbl: { fontSize: 12, fontWeight: 600, color: c.ink, marginTop: 2 },
+  statSub: { fontSize: 10, color: c.ink3, marginTop: 3 },
+  section: { padding: '28px 20px 8px' },
+  sectionHead: {
+    fontSize: 11, fontWeight: 600, letterSpacing: '1.5px',
+    textTransform: 'uppercase', color: c.ink3,
+    textAlign: 'center', marginBottom: 16,
+  },
+  featureList: { display: 'flex', flexDirection: 'column', gap: 10 },
+  featureRow: {
+    background: '#fff', border: `1px solid ${c.border}`,
+    borderRadius: 14, padding: '14px 16px',
+    display: 'flex', alignItems: 'center', gap: 14, direction: 'rtl',
+  },
+  featureIcon: {
+    width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+  },
+  featureName: { fontSize: 14, fontWeight: 600, color: c.ink },
+  featureSub:  { fontSize: 12, color: c.ink3, marginTop: 3 },
+  ctaCard: {
+    margin: '24px 20px 36px',
+    background: c.ink, borderRadius: 18,
+    padding: '30px 24px', textAlign: 'center',
+  },
+  ctaTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 26, fontWeight: 700, color: '#fff', marginBottom: 10,
+  },
+  ctaSub: { color: 'rgba(255,255,255,0.55)', fontSize: 13, marginBottom: 22 },
+  ctaBtn: {
+    background: c.mint, color: '#fff', border: 'none',
+    borderRadius: 12, padding: '14px', fontSize: 15,
+    fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', width: '100%',
   },
 }
 
