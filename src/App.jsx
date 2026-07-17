@@ -123,7 +123,7 @@ export default function App() {
             onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
           />
 
-          <main style={{ paddingTop: 60, paddingBottom: isApp ? 86 : 0 }}>
+          <main style={{ paddingBottom: isApp ? 86 : 0 }}>
             {screen === 'landing'          && <LandingScreen onStart={() => setScreen('auth')} />}
             {screen === 'auth'             && <AuthScreen    onSuccess={enterApp} />}
             {screen === 'reset-password'   && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}

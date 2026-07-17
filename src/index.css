@@ -1,35 +1,56 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --ink:  #1a1a2e;
-  --ink2: #4a4a6a;
-  --ink3: #8888aa;
-  --cream: #faf8f4;
-  --surface: #f0ede6;
-  --white: #ffffff;
-  --mint:  #2ec4a0;
-  --mint-l: #e8faf5;
-  --mint-d: #1a9e80;
-  --gold:  #e8a020;
-  --gold-l: #fff8e8;
-  --rose:  #e05070;
-  --rose-l: #fef0f3;
-  --sky:   #4080f0;
-  --sky-l: #eef4ff;
+  --ink:    #0f172a;
+  --ink2:   #475569;
+  --ink3:   #94a3b8;
+  --cream:  #f8fafc;
+  --surface:#f1f5f9;
+  --white:  #ffffff;
+  --mint:   #10b981;
+  --mint-l: #d1fae5;
+  --mint-d: #059669;
+  --gold:   #f59e0b;
+  --gold-l: #fef3c7;
+  --rose:   #f43f5e;
+  --rose-l: #ffe4e6;
+  --sky:    #3b82f6;
+  --sky-l:  #dbeafe;
+  --border: rgba(15,23,42,0.08);
 }
 
 body {
-  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--cream);
   color: var(--ink);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-input::placeholder { color: var(--ink3); }
-input { color-scheme: light; color: var(--ink); }
+input::placeholder  { color: var(--ink3); }
+input               { color-scheme: light; color: var(--ink); font-size: 16px; }
 textarea::placeholder { color: var(--ink3); }
+button              { font-family: inherit; }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+/* Premium card utility */
+.card {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 8px 24px rgba(15,23,42,0.06);
+  padding: 20px;
+}
+
+/* Frosted glass utility */
+.glass {
+  background: rgba(255,255,255,0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.6);
+}
+
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes fadeUp  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }

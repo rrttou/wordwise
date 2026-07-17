@@ -183,13 +183,14 @@ function FireIcon() {
 /* ─── Styles ─────────────────────────────────────────────────────── */
 const s = {
   topBar: {
-    position: 'fixed',
-    top: 0, left: 0, right: 0,
+    position: 'sticky',
+    top: 0,
     height: 60,
-    background: 'rgba(250,248,244,0.92)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    borderBottom: `1px solid ${c.border}`,
+    background: 'rgba(248,250,252,0.85)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    borderBottom: '1px solid rgba(15,23,42,0.06)',
+    boxShadow: '0 1px 12px rgba(15,23,42,0.06)',
     zIndex: 100,
   },
   topBarInner: {

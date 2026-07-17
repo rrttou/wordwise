@@ -1177,18 +1177,20 @@ const s = {
 
   /* hub mode cards */
   modeCard: {
-    width: '100%', borderRadius: 16, padding: '18px 20px',
-    border: 'none', cursor: 'pointer', marginBottom: 12,
+    width: '100%', borderRadius: 20, padding: '20px 22px',
+    border: 'none', cursor: 'pointer', marginBottom: 10,
     textAlign: 'right', position: 'relative',
     fontFamily: 'inherit', display: 'block',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
   },
-  modeLangs: { fontSize: 14, marginBottom: 6 },
-  modeTitle: { color: '#fff', fontSize: 16, fontWeight: 600, marginBottom: 3 },
-  modeSub:   { color: 'rgba(255,255,255,0.55)', fontSize: 12 },
+  modeLangs: { fontSize: 16, marginBottom: 8, letterSpacing: '1px' },
+  modeTitle: { color: '#fff', fontSize: 17, fontWeight: 700, marginBottom: 4, letterSpacing: '-0.2px' },
+  modeSub:   { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
   modeChevron: {
-    position: 'absolute', top: '50%', left: 18,
+    position: 'absolute', top: '50%', left: 20,
     transform: 'translateY(-50%)',
-    color: 'rgba(255,255,255,0.3)', fontSize: 18,
+    color: 'rgba(255,255,255,0.4)', fontSize: 20,
   },
 
   /* sentence match chips */
@@ -1203,33 +1205,53 @@ const s = {
   pickChipOn: { background: c.mintL, borderColor: c.mint, color: c.mintD },
 
   /* quiz */
-  track: { height: 5, background: c.surface, borderRadius: 3, marginBottom: 24, overflow: 'hidden' },
-  bar:   { height: '100%', borderRadius: 3, transition: 'width 0.3s' },
-  card:  { borderRadius: 16, padding: '28px 24px', marginBottom: 20, textAlign: 'center' },
-  dirLabel: {
-    display: 'inline-block',
-    background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)',
-    borderRadius: 6, padding: '3px 10px',
-    fontSize: 11, fontWeight: 600, letterSpacing: '1px', marginBottom: 14,
+  track: { height: 4, background: c.surface, borderRadius: 2, marginBottom: 20, overflow: 'hidden' },
+  bar:   { height: '100%', borderRadius: 2, transition: 'width 0.4s ease' },
+  card:  {
+    borderRadius: 28,
+    padding: '48px 28px 40px',
+    marginBottom: 24,
+    textAlign: 'center',
+    boxShadow: '0 16px 48px rgba(0,0,0,0.22)',
   },
-  qWord:   { fontFamily: "'Playfair Display', serif", fontSize: 34, fontWeight: 600, color: '#fff', marginBottom: 8 },
-  qPrompt: { fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 },
+  dirLabel: {
+    display: 'inline-flex', alignItems: 'center',
+    background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)',
+    borderRadius: 20, padding: '4px 14px',
+    fontSize: 11, fontWeight: 600, letterSpacing: '1.2px',
+    textTransform: 'uppercase', marginBottom: 20,
+    border: '1px solid rgba(255,255,255,0.2)',
+  },
+  qWord:   {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 44, fontWeight: 700, color: '#fff',
+    marginBottom: 12, lineHeight: 1.1, letterSpacing: '-0.5px',
+  },
+  qPrompt: { fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 },
   options: { display: 'flex', flexDirection: 'column', gap: 10 },
   opt: {
-    display: 'flex', alignItems: 'center', gap: 12,
-    background: c.white, border: `1.5px solid ${c.border}`,
-    borderRadius: 12, padding: '14px 16px',
+    display: 'flex', alignItems: 'center', gap: 14,
+    background: c.white,
+    border: `1.5px solid ${c.border}`,
+    borderRadius: 16, padding: '16px 18px',
     cursor: 'pointer', fontFamily: 'inherit', width: '100%',
-    transition: 'background 0.15s, border-color 0.15s',
+    boxShadow: '0 2px 8px rgba(15,23,42,0.06)',
+    transition: 'all 0.15s ease',
   },
-  optGreen: { background: c.mintL, borderColor: c.mint },
-  optRed:   { background: c.roseL, borderColor: c.rose },
+  optGreen: {
+    background: c.mintL, borderColor: c.mint,
+    boxShadow: `0 4px 16px rgba(16,185,129,0.2)`,
+  },
+  optRed: {
+    background: c.roseL, borderColor: c.rose,
+    boxShadow: `0 4px 16px rgba(244,63,94,0.2)`,
+  },
   letter: {
-    width: 28, height: 28, borderRadius: '50%', background: c.surface,
+    width: 32, height: 32, borderRadius: '50%', background: c.surface,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 12, fontWeight: 600, color: c.ink2, flexShrink: 0,
+    fontSize: 12, fontWeight: 700, color: c.ink2, flexShrink: 0,
   },
-  optText: { fontSize: 15, color: c.ink },
+  optText: { fontSize: 15, color: c.ink, fontWeight: 500 },
 
   /* results */
   resultCard: {
