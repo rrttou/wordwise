@@ -1,28 +1,66 @@
+import { useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
-/*
- * SwipeCards — animated card transition wrapper.
- * Accepts either button-based navigation (currentIndex prop)
- * or renders a horizontal snap-scroll flashcard strip (mode="scroll").
- */
 export default function SwipeCards({ items, currentIndex, renderCard, style, mode }) {
+  const containerRef = useRef(null)
+  const isDragging   = useRef(false)
+  const startX       = useRef(0)
+  const scrollLeft   = useRef(0)
+
+  function onMouseDown(e) {
+    isDragging.current = true
+    startX.current     = e.pageX - containerRef.current.offsetLeft
+    scrollLeft.current = containerRef.current.scrollLeft
+    containerRef.current.style.cursor = 'grabbing'
+    containerRef.current.style.userSelect = 'none'
+  }
+
+  function onMouseUp() {
+    isDragging.current = false
+    if (containerRef.current) {
+      containerRef.current.style.cursor = 'grab'
+      containerRef.current.style.userSelect = ''
+    }
+  }
+
+  function onMouseMove(e) {
+    if (!isDragging.current) return
+    e.preventDefault()
+    const x    = e.pageX - containerRef.current.offsetLeft
+    const walk = (x - startX.current) * 1.8
+    containerRef.current.scrollLeft = scrollLeft.current - walk
+  }
+
   if (mode === 'scroll') {
     return (
       <div
-        className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide py-4"
-        style={style}
+        ref={containerRef}
+        className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide py-3"
+        style={{ cursor: 'grab', ...style }}
+        onMouseDown={onMouseDown}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onMouseMove={onMouseMove}
       >
         {items.map((item, idx) => (
           <motion.div
             key={item.id ?? idx}
-            className="min-w-[85%] mx-2 snap-center bg-surface rounded-2xl shadow-card border border-gray-100"
-            initial={{ opacity: 0, scale: 0.95 }}
+            className="min-w-[82%] mx-2 snap-center flex-shrink-0"
+            style={{
+              background: '#111113',
+              border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: 16,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.25, delay: idx * 0.04 }}
+            transition={{ duration: 0.22, delay: idx * 0.05 }}
           >
             {renderCard(item, idx)}
           </motion.div>
         ))}
+        {/* trailing spacer */}
+        <div style={{ minWidth: 8, flexShrink: 0 }} />
       </div>
     )
   }

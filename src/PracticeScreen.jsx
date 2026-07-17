@@ -177,14 +177,19 @@ function HubView({
             mode="scroll"
             items={recentWords}
             renderCard={(w) => (
-              <div className="p-8 text-center" dir="ltr">
-                <h2 className="text-2xl font-bold text-accent">{w.word}</h2>
+              <div style={{ padding: '28px 20px', textAlign: 'center' }} dir="ltr">
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 700, color: c.ink }}>{w.word}</div>
                 {w.level && (
-                  <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-sky-100 text-primary">
+                  <span style={{
+                    display: 'inline-block', marginTop: 8, padding: '3px 12px',
+                    borderRadius: 20, fontSize: 11, fontWeight: 600,
+                    background: c.mintL, color: c.mintD,
+                    border: '1px solid rgba(16,185,129,0.25)',
+                  }}>
                     {w.level}
                   </span>
                 )}
-                <p className="text-lg text-gray-500 mt-4">{w.translation}</p>
+                <p style={{ fontSize: 15, color: c.ink3, marginTop: 12 }}>{w.translation}</p>
               </div>
             )}
           />
@@ -192,7 +197,7 @@ function HubView({
       )}
 
       {/* Mode cards */}
-      <button style={{ ...s.modeCard, background: c.ink }} onClick={() => modeClick('quiz', 'en-he')}>
+      <button style={{ ...s.modeCard, background: 'linear-gradient(135deg, #18181b 0%, #111113 100%)', border: '1px solid rgba(255,255,255,0.08)' }} onClick={() => modeClick('quiz', 'en-he')}>
         <div style={s.modeLangs}><span style={{ color: c.mint, fontWeight: 700 }}>EN</span><span style={{ color: 'rgba(255,255,255,0.3)', margin: '0 8px' }}>→</span><span style={{ color: 'rgba(255,255,255,0.6)' }}>עב</span></div>
         <div style={s.modeTitle}>אנגלית → עברית</div>
         <div style={s.modeSub}>{hasCurrent ? 'תרגל את הקבוצה הפעילה' : 'ראה מילה באנגלית, בחר תרגום'}</div>
@@ -313,7 +318,7 @@ function HubView({
 
 /* ─── Session mode picker (bottom sheet) ─────────────────────────── */
 const MODES = [
-  { type: 'quiz',    dir: 'en-he', label: 'EN → עב',       bg: c.ink              },
+  { type: 'quiz',    dir: 'en-he', label: 'EN → עב',       bg: 'linear-gradient(135deg,#18181b,#111113)' },
   { type: 'quiz',    dir: 'he-en', label: 'עב → EN',       bg: c.sky              },
   { type: 'story',   dir: null,    label: 'סיפורים ✦',     bg: `linear-gradient(135deg,${c.gold},#c87800)` },
   { type: 'write',   dir: null,    label: 'כתיבת משפטים ✍', bg: `linear-gradient(135deg,${c.mint},#1a9e80)` },
@@ -1108,7 +1113,7 @@ const s = {
   sessionItemRight: { display: 'flex', alignItems: 'center', gap: 10 },
   practiceBtn: {
     background: c.mint, border: 'none', borderRadius: 8,
-    color: '#fff', fontSize: 12, fontWeight: 600,
+    color: '#09090b', fontSize: 12, fontWeight: 700,
     padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit',
     whiteSpace: 'nowrap',
   },
@@ -1271,8 +1276,8 @@ const s = {
   resultPct:   { fontSize: 14, color: c.ink3, marginTop: 8 },
 
   primaryBtn: {
-    background: c.mint, color: '#fff', border: 'none',
-    borderRadius: 12, padding: '14px', fontSize: 15, fontWeight: 500,
+    background: c.mint, color: '#09090b', border: 'none',
+    borderRadius: 12, padding: '14px', fontSize: 15, fontWeight: 700,
     cursor: 'pointer', width: '100%', fontFamily: 'inherit', marginBottom: 10,
   },
   secondaryBtn: {
@@ -1288,6 +1293,13 @@ const s = {
   },
 
   /* sentence write */
+  typeArea: {
+    width: '100%', background: 'rgba(255,255,255,0.05)',
+    border: `1px solid ${c.border}`, borderRadius: 10,
+    padding: '12px 14px', fontSize: 14, color: c.ink,
+    outline: 'none', fontFamily: 'inherit', resize: 'none',
+    lineHeight: 1.6,
+  },
   feedbackCard: {
     background: c.white,
     border: `1.5px solid ${c.border}`,
