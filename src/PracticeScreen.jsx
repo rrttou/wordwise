@@ -164,23 +164,30 @@ function HubView({
         </div>
       </div>
 
-      {/* Recently translated words */}
+      {/* Swipeable flashcard strip — recent words */}
       {recentWords.length > 0 && (
-        <div style={s.recentCard}>
+        <div style={{ marginBottom: 20 }}>
           <div style={s.recentHeader}>
-            <span style={s.recentLabel}>הוסף לאחרונה</span>
+            <span style={s.recentLabel}>סקור מילים — החלק →</span>
             <button style={s.recentPracticeBtn} onClick={onPracticeRecent}>
               תרגל אותן ←
             </button>
           </div>
-          <div style={s.recentChips}>
-            {recentWords.map(w => (
-              <div key={w.id} style={s.recentChip}>
-                <span style={s.recentWord}>{w.word}</span>
-                {w.translation && <span style={s.recentTrans}>{w.translation}</span>}
+          <SwipeCards
+            mode="scroll"
+            items={recentWords}
+            renderCard={(w) => (
+              <div className="p-8 text-center" dir="ltr">
+                <h2 className="text-2xl font-bold text-accent">{w.word}</h2>
+                {w.level && (
+                  <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-sky-100 text-primary">
+                    {w.level}
+                  </span>
+                )}
+                <p className="text-lg text-gray-500 mt-4">{w.translation}</p>
               </div>
-            ))}
-          </div>
+            )}
+          />
         </div>
       )}
 

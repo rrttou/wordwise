@@ -18,7 +18,7 @@ export function TopBar({ user, screen, streak, onHome, onLogin, onBack, onLogout
   const isApp = screen === 'app'
 
   return (
-    <header style={s.topBar}>
+    <header className="sticky top-0 z-[100] bg-surface/85 backdrop-blur-xl border-b border-black/[0.06] shadow-sm" style={{ height: 60 }}>
       <div style={s.topBarInner}>
 
         {isApp ? (
