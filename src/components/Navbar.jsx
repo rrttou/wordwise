@@ -18,7 +18,7 @@ export function TopBar({ user, screen, streak, onHome, onLogin, onBack, onLogout
   const isApp = screen === 'app'
 
   return (
-    <header className="sticky top-0 z-[100] bg-surface/85 backdrop-blur-xl border-b border-black/[0.06] shadow-sm" style={{ height: 60 }}>
+    <header style={s.topBar}>
       <div style={s.topBarInner}>
 
         {isApp ? (
@@ -186,11 +186,9 @@ const s = {
     position: 'sticky',
     top: 0,
     height: 60,
-    background: 'rgba(248,250,252,0.85)',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
-    borderBottom: '1px solid rgba(15,23,42,0.06)',
-    boxShadow: '0 1px 12px rgba(15,23,42,0.06)',
+    background: '#ffffff',
+    borderBottom: '1px solid #dddddd',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
     zIndex: 100,
   },
   topBarInner: {
