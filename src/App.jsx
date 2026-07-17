@@ -121,9 +121,47 @@ export default function App() {
   const isApp    = screen === 'app'
   const tabIndex = TABS.findIndex(t => t.id === tab)
 
+  if (isApp) {
+    return (
+      <Layout>
+        <SessionProvider user={user}>
+          {/* App mode: fixed viewport height, flex column, pages scroll inside */}
+          <div style={{
+            background: c.cream, height: '100dvh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <TopBar
+              user={user} screen="app" streak={streak}
+              onHome={goHome}
+              onLogin={() => setScreen('auth')}
+              onBack={() => setScreen('landing')}
+              onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
+            />
+            <TabStrip tab={tab} setTab={setTab} />
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+              <PageSwiper
+                fullHeight
+                index={tabIndex}
+                onIndexChange={i => setTab(TABS[i].id)}
+              >
+                <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} onPractice={() => setTab('practice')} />
+                <UploadWords user={user} />
+                <PracticeScreen user={user} />
+                <GlobalWordBank user={user} />
+                <ProfileScreen user={user} onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }} />
+              </PageSwiper>
+            </div>
+            {quickAdd && <QuickAddModal user={user} onClose={() => setQuickAdd(false)} />}
+          </div>
+        </SessionProvider>
+      </Layout>
+    )
+  }
+
   return (
     <Layout>
       <SessionProvider user={user}>
+        {/* Non-app mode: normal scrollable layout */}
         <div style={{ background: c.cream, minHeight: '100vh' }}>
           <TopBar
             user={user} screen={screen} streak={streak}
@@ -132,29 +170,12 @@ export default function App() {
             onBack={() => setScreen(user ? 'app' : 'landing')}
             onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }}
           />
-
-          {isApp && <TabStrip tab={tab} setTab={setTab} />}
-
           <main>
             {screen === 'landing'        && <LandingScreen onStart={() => setScreen('auth')} />}
             {screen === 'auth'           && <AuthScreen    onSuccess={enterApp} />}
             {screen === 'reset-password' && <ResetPasswordScreen onSuccess={() => { setTab('dashboard'); setScreen('app') }} />}
             {screen === 'placement-test' && <PlacementTestScreen user={user} onComplete={() => { setTab('dashboard'); setScreen('app') }} />}
-
-            {isApp && (
-              <PageSwiper index={tabIndex} onIndexChange={i => setTab(TABS[i].id)}>
-                <DashboardScreen user={user} streak={streak} onUpload={() => setTab('upload')} onQuickAdd={() => setQuickAdd(true)} onPractice={() => setTab('practice')} />
-                <UploadWords user={user} />
-                <PracticeScreen user={user} />
-                <GlobalWordBank user={user} />
-                <ProfileScreen user={user} onLogout={() => { supabase.auth.signOut(); setUser(null); setScreen('landing') }} />
-              </PageSwiper>
-            )}
           </main>
-
-          {isApp && quickAdd && (
-            <QuickAddModal user={user} onClose={() => setQuickAdd(false)} />
-          )}
         </div>
       </SessionProvider>
     </Layout>
@@ -977,7 +998,7 @@ const s = {
   wrap: {
     maxWidth: 420,
     margin: '0 auto',
-    padding: '20px 16px',
+    padding: '20px 16px 48px',
     direction: 'rtl',
   },
 

@@ -952,7 +952,7 @@ function GrammarQuizView({ user, source, customWords, onBack, onFinish }) {
 function ModeSwiper({ hasCurrent, onModeClick }) {
   const [idx, setIdx] = useState(0)
   return (
-    <div style={{ marginBottom: 8 }}>
+    <div data-no-swipe="true" style={{ marginBottom: 8 }}>
       <PageSwiper index={idx} onIndexChange={setIdx}>
         {PRACTICE_MODES.map((m, i) => (
           <ModeCard key={i} mode={m} hasCurrent={hasCurrent} onClick={() => onModeClick(m.type, m.dir)} />
@@ -1066,7 +1066,7 @@ function Spinner({ label }) {
 
 /* ─── Styles ─────────────────────────────────────────────────────── */
 const s = {
-  wrap: { maxWidth: 420, margin: '0 auto', padding: '20px 16px 32px', direction: 'rtl' },
+  wrap: { maxWidth: 420, margin: '0 auto', padding: '20px 16px 48px', direction: 'rtl' },
 
   pageHeader: { textAlign: 'center', marginBottom: 24 },
   pageTitle:  { fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 600, color: c.ink, marginBottom: 6 },
